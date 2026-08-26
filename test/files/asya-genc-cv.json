@@ -1,0 +1,106 @@
+{
+  "fullName": "Asya Genç",
+  "headline": "Software Engineer",
+  "contact": {
+    "email": "asyagenc444@gmail.com",
+    "url": "https://github.com/asyagenc"
+  },
+  "summary": "Fresh graduate from Bahçeşehir University with software engineering internship experience at SabancıDx and Orion Innovation. Built Android, AI, and machine learning projects using Kotlin, Python, Jetpack Compose, Firebase, PyTorch, Langfuse, n8n and vLLM.\n",
+  "experience": [
+    {
+      "title": "Software Engineering Intern",
+      "company": "SabancıDx",
+      "dates": "Summer 2025",
+      "url": "",
+      "descriptions": [
+        "Integrated PostgreSQL for backend data handling and system workflows.",
+        "Managed development processes using Azure DevOps in an Agile/Scrum environment.",
+        "Developed backend features using C# and .NET Framework."
+      ]
+    },
+    {
+      "title": "R&D / Software Engineering Intern",
+      "company": "Orion Innovation",
+      "dates": "November 2025 - March 2026",
+      "url": "",
+      "descriptions": [
+        "Built automated evaluation pipelines using Langfuse, including datasets, traces, and metrics.",
+        "Designed and tested automated LLM workflows via n8n.",
+        "Deployed and benchmarked models using vLLM endpoints."
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "PlateRate",
+      "subtitle": "Android application",
+      "url": "https://github.com/asyagenc/PlateRate",
+      "bullets": [
+        "Developed PlateRate, an Android application that enables users to comment on license plates."
+      ]
+    },
+    {
+      "name": "Skin Lesion Classification",
+      "subtitle": "Multi-Modal Ensemble System",
+      "url": "https://github.com/elifoskanbas/skin-cancer-detection",
+      "bullets": [
+        "Built a multi-modal ensemble system for 11-class skin lesion classification.",
+        "Placed rank 41 in the 11-class ISIC skin cancer challenge with Dice score 0.483."
+      ]
+    },
+    {
+      "name": "Pickly",
+      "subtitle": "Android application",
+      "url": "",
+      "bullets": [
+        "Developing an AI-powered recommendation app using the OpenAI API."
+      ]
+    },
+    {
+      "name": "Lemonade",
+      "subtitle": "Android educational game",
+      "url": "https://github.com/asyagenc/lemonadeo",
+      "bullets": [
+        "Developed an Android-based educational game using Firebase."
+      ]
+    }
+  ],
+  "education": [
+    {
+      "institution": "Bahçeşehir University",
+      "degree": "Computer Engineering Bachelor's Degree",
+      "dates": "2022 - July 2026",
+      "details": []
+    },
+    {
+      "institution": "Vefa High School",
+      "degree": "High School Diploma",
+      "dates": "Graduated June 2020",
+      "details": []
+    }
+  ],
+  "certifications": [],
+  "skills": [
+    "Python",
+    "Java",
+    "Kotlin",
+    "Jetpack Compose",
+    "SQL",
+    "C++",
+    "C#",
+    ".NET Framework",
+    "PostgreSQL",
+    "Firebase",
+    "PyTorch",
+    "scikit-learn",
+    "Langfuse",
+    "n8n",
+    "vLLM",
+    "Git",
+    "Azure DevOps",
+    "English (fluent)",
+    "Turkish (fluent)"
+  ],
+  "references": [],
+  "extras": []
+}
