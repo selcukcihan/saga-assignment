@@ -26,7 +26,7 @@ Tier 2 and Tier 3 features are deliberately out of scope. In particular, the fir
 
 | Assignment requirement | Implemented location | Status |
 | --- | --- | --- |
-| PDF, DOCX, CSV, and JSON ingestion | Ingestion API, format-specific parsers, ingestion worker | Implemented and E2E tested |
+| PDF, DOCX, CSV, and JSON ingestion | Ingestion API, native parsers, selective local PDF OCR, ingestion worker | Implemented and E2E tested |
 | Asynchronous ingestion with job status | PostgreSQL-backed job queue and `GET /jobs/{id}` | Implemented and E2E tested |
 | Chunk storage with embeddings | PostgreSQL `chunks` table with a pgvector column | Implemented with Drizzle migration |
 | Session management | `POST /chat` creates a session when `session_id` is omitted | Implemented and E2E tested |
@@ -82,7 +82,7 @@ flowchart LR
 | Express API | HTTP routing, multipart upload handling, request validation, response mapping, and error translation |
 | Ingestion application service | Validate ingestion commands, create document/job records, and return an asynchronous acknowledgement |
 | Ingestion worker | Claim jobs, parse files, normalize content, create chunks, request embeddings, persist indexed chunks, and manage retries/failures |
-| Parser implementations | Convert each supported file format into a common normalized representation while preserving source locations |
+| Parser implementations | Convert each supported file format into a common normalized representation while preserving source locations; OCR image-backed PDF pages locally when needed |
 | Chunking component | Apply an approved format-aware chunking policy and produce deterministic chunks |
 | Embedding gateway | Isolate the external embedding API and support batching, timeouts, and provider error translation |
 | Retrieval repository | Perform pgvector similarity search and return ranked chunks with citation metadata |
@@ -382,12 +382,14 @@ Local compatibility is configuration-based, not a promise that every local serve
 
 ### Parser Libraries - Decided
 
-- **PDF:** Mozilla PDF.js through `pdfjs-dist`, selected for its mature upstream project and direct page-level extraction needed for citations.
+- **PDF:** Mozilla PDF.js through `pdfjs-dist` for native page-level extraction. Pages containing raster images with fewer than 100 non-whitespace native characters fall back to Poppler rendering and local Tesseract OCR. OCR output replaces native text only when it recovers more content, and citations remain page-based.
 - **DOCX:** Mammoth, selected for established semantic DOCX-to-HTML extraction. DOCX page numbers are not stable, so citations use headings and paragraph positions.
 - **CSV:** `csv-parse`, selected over Papa Parse for its server-side Node streaming API and strong package adoption, despite Papa Parse having more GitHub stars.
 - **JSON:** the built-in `JSON.parse`, followed by application validation and traversal; an external parser is unnecessary for the assignment's non-streaming JSON scope.
 
 Popularity was used as a signal, not the sole criterion. Maintenance activity, server-side suitability, TypeScript usability, streaming behavior, and the citation metadata we need were also considered. Exact dependency versions are pinned in `package-lock.json`.
+
+Selective OCR closes an important PDF edge case: a visually text-heavy PDF may store its main page as an image while exposing only a few overlay labels in its text layer. Running OCR only on suspicious image-bearing pages avoids the cost on normal digital PDFs. Poppler and Tesseract increase the application image size and ingestion latency, but keep legal document pages local rather than introducing another external processor. OCR enablement, native-text threshold, DPI, language, and timeout are configurable.
 
 ### Shared Docker Volume for Documents - Decided
 
@@ -439,6 +441,7 @@ Unit tests live under the root `test/` directory and mirror the path under `src/
 src/application/chat-service.ts  -> test/application/chat-service.spec.ts
 src/config/env.ts                -> test/config/env.spec.ts
 src/parsers/json-parser.ts       -> test/parsers/json-parser.spec.ts
+src/parsers/pdf-parser.ts        -> test/parsers/pdf-parser.spec.ts
 
 test/e2e/                        end-to-end specifications
 test/fake-ai/                    deterministic OpenAI-compatible fake
@@ -476,10 +479,11 @@ The test profile uses a deterministic OpenAI-compatible fake service for embeddi
 The main end-to-end scenarios are:
 
 1. Upload representative PDF, DOCX, CSV, and JSON files; observe `202`, a queued/running job, and eventual completion.
-2. Ask a grounded question after ingestion; verify that the response contains an answer, valid chunk-backed citations, and a returned `session_id`.
-3. Continue the session with that identifier and retrieve the persisted ordered history with sources.
-4. Reject an unsupported or malformed upload with the documented error envelope.
-5. Simulate a provider/parser failure and verify retry/final failed-job behavior without exposing internal error details.
+2. Ask which formats the image-backed assignment PDF requires; verify OCR recovers PDF, DOCX, CSV, and JSON and returns a page-one citation.
+3. Ask a grounded question after ingestion; verify that the response contains an answer, valid chunk-backed citations, and a returned `session_id`.
+4. Continue the session with that identifier and retrieve the persisted ordered history with sources.
+5. Reject an unsupported or malformed upload with the documented error envelope.
+6. Simulate a provider/parser failure and verify retry/final failed-job behavior without exposing internal error details.
 
 Assertions target stable behavior and persisted relationships, not exact natural-language wording. The end-to-end environment starts from isolated database and upload volumes, then removes them, so runs do not depend on previous state.
 
@@ -516,7 +520,7 @@ Set `OPENAI_API_KEY` in `.env`, then run:
 docker compose up --build
 ```
 
-The API listens on `http://localhost:3000`. Compose waits for PostgreSQL, runs the Drizzle migration as a one-shot service, and starts API and worker only after migration success. No host installation of Node.js, PostgreSQL, pgvector, or parser tools is required.
+The API listens on `http://localhost:3000`. Compose waits for PostgreSQL, runs the Drizzle migration as a one-shot service, and starts API and worker only after migration success. The application image includes Poppler and English Tesseract data for selective PDF OCR; no host installation of Node.js, PostgreSQL, pgvector, OCR, or parser tools is required. Using another `PDF_OCR_LANGUAGE` also requires adding its Tesseract language package to the runtime image.
 
 To stop while preserving ingested data:
 
@@ -544,7 +548,7 @@ Compose starts the API, worker, and PostgreSQL automatically. It includes a Post
 
 The end-to-end command activates an isolated Compose test profile that adds the deterministic AI fake and test runner, waits on service health checks, returns the test runner's exit code, and removes its isolated volumes afterward. Reviewers do not need to start or clean up individual services manually.
 
-`.env.example` documents the database URL, upload path, independent embedding and generation base URLs/API keys/model names, embedding dimensions, server port, log level, retrieval limit, and worker polling/retry settings. Hosted OpenAI is the default. To use local compatible servers, set the two base URLs and model names independently and provide any non-empty key value required by those servers.
+`.env.example` documents the database URL, upload path, PDF OCR controls, independent embedding and generation base URLs/API keys/model names, embedding dimensions, server port, log level, retrieval limit, and worker polling/retry settings. Hosted OpenAI is the default. To use local compatible servers, set the two base URLs and model names independently and provide any non-empty key value required by those servers.
 
 ## What Would Change in Production
 
@@ -563,6 +567,7 @@ The end-to-end command activates an isolated Compose test profile that adds the 
 - Add authentication, authorization, tenant isolation, and document-level access control.
 - Encrypt traffic and persistent data; use a secrets manager and short-lived credentials.
 - Apply strict file-size/type checks, malware scanning, archive-bomb defenses, and parser sandboxing.
+- Apply OCR page, pixel, CPU, memory, and execution-time limits; isolate native parser and OCR processes from sensitive host resources.
 - Treat retrieved text as untrusted input and defend against prompt injection and data exfiltration.
 - Apply retention/deletion policies suitable for legal documents and verify cascading deletion of embeddings, citations, and stored files.
 - Maintain audit logs for document access, ingestion, retrieval, and administrative operations without logging sensitive document content.
@@ -615,6 +620,8 @@ These are defaults, not promises that tuning values will never change. Changes t
 - [OpenAI `text-embedding-3-small`](https://developers.openai.com/api/docs/models/text-embedding-3-small)
 - [OpenAI GPT-5.4 mini](https://developers.openai.com/api/docs/models/gpt-5.4-mini)
 - [Mozilla PDF.js](https://github.com/mozilla/pdf.js)
+- [Poppler](https://poppler.freedesktop.org/)
+- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract)
 - [Mammoth](https://github.com/mwilliamson/mammoth.js)
 - [Node CSV](https://github.com/adaltas/node-csv)
 - [Vitest](https://vitest.dev/)

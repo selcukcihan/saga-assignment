@@ -4,6 +4,8 @@ const integerFromEnv = (defaultValue: number, minimum = 1) =>
   z.coerce.number().int().min(minimum).default(defaultValue);
 
 const baseUrl = z.string().url().transform((value) => value.replace(/\/$/, ""));
+const booleanFromEnv = (defaultValue: boolean) =>
+  z.enum(["true", "false"]).default(String(defaultValue) as "true" | "false").transform((value) => value === "true");
 
 const databaseSchema = z.object({
   DATABASE_URL: z.string().min(1).default("postgres://saga:saga@localhost:5432/saga"),
@@ -19,6 +21,11 @@ const configSchema = databaseSchema.extend({
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   UPLOAD_DIR: z.string().min(1).default("./uploads"),
   MAX_UPLOAD_BYTES: integerFromEnv(10 * 1024 * 1024),
+  PDF_OCR_ENABLED: booleanFromEnv(true),
+  PDF_OCR_MIN_NATIVE_CHARACTERS: integerFromEnv(100, 0),
+  PDF_OCR_DPI: z.coerce.number().int().min(72).max(600).default(200),
+  PDF_OCR_LANGUAGE: z.string().regex(/^[a-z0-9_+.-]+$/i).default("eng"),
+  PDF_OCR_TIMEOUT_MS: integerFromEnv(60_000),
 
   EMBEDDING_BASE_URL: baseUrl.default("https://api.openai.com/v1"),
   EMBEDDING_API_KEY: z.string().min(1),
@@ -76,6 +83,13 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     logLevel: parsed.LOG_LEVEL,
     database: mapDatabaseConfig(parsed),
     upload: { directory: parsed.UPLOAD_DIR, maxBytes: parsed.MAX_UPLOAD_BYTES },
+    pdf: {
+      ocrEnabled: parsed.PDF_OCR_ENABLED,
+      ocrMinNativeCharacters: parsed.PDF_OCR_MIN_NATIVE_CHARACTERS,
+      ocrDpi: parsed.PDF_OCR_DPI,
+      ocrLanguage: parsed.PDF_OCR_LANGUAGE,
+      ocrTimeoutMs: parsed.PDF_OCR_TIMEOUT_MS,
+    },
     embedding: {
       baseUrl: parsed.EMBEDDING_BASE_URL,
       apiKey: parsed.EMBEDDING_API_KEY,

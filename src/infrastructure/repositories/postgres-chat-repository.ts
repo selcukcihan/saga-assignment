@@ -67,7 +67,7 @@ export class PostgresChatRepository implements ChatRepository {
       `SELECT role, content
          FROM messages
         WHERE session_id = $1
-        ORDER BY created_at DESC, id DESC
+        ORDER BY created_at DESC, CASE role WHEN 'user' THEN 0 ELSE 1 END DESC, id DESC
         LIMIT $2`,
       [sessionId, limit],
     );
@@ -141,7 +141,7 @@ export class PostgresChatRepository implements ChatRepository {
       `SELECT id, role, content, created_at
          FROM messages
         WHERE session_id = $1
-        ORDER BY created_at, id`,
+        ORDER BY created_at, CASE role WHEN 'user' THEN 0 ELSE 1 END, id`,
       [id],
     );
     const sourceResult = await this.pool.query<SourceRow>(

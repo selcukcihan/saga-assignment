@@ -82,6 +82,26 @@ describe.sequential("core API", () => {
     }
   });
 
+  it("extracts useful text from the image-backed assignment PDF through OCR", async () => {
+    const response = await fetch(`${api}/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ question: "Which document formats must the core API support?" }),
+    });
+    expect(response.status).toBe(200);
+    const result = await response.json() as {
+      answer: string;
+      sources: Array<{ filename: string; locator: { format: string; page?: number } }>;
+    };
+    expect(result.answer).toMatch(/PDF/i);
+    expect(result.answer).toMatch(/DOCX/i);
+    expect(result.answer).toMatch(/CSV/i);
+    expect(result.answer).toMatch(/JSON/i);
+    expect(result.sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ filename: "assignment.pdf", locator: expect.objectContaining({ format: "pdf", page: 1 }) }),
+    ]));
+  });
+
   it("answers with chunk-backed sources and persists a continuing session", async () => {
     const firstResponse = await fetch(`${api}/chat`, {
       method: "POST",

@@ -40,13 +40,12 @@ createServer(async (request, response) => {
   if (request.url === "/v1/chat/completions" && request.method === "POST") {
     const system = body.messages?.find((message) => message.role === "system")?.content ?? "";
     const context = system.split("DOCUMENT CONTEXT\n")[1] ?? "";
-    const first = context.split("\n\n")[0]?.split("\n").slice(1).join(" ").slice(0, 300) ?? "";
     return json(response, 200, {
       id: "chatcmpl-test",
       object: "chat.completion",
       created: 0,
       model: body.model,
-      choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: `${first} [1]` } }],
+      choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: `${context} [1]` } }],
       usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
     });
   }

@@ -1,29 +1,64 @@
-import type { TextItem } from "pdfjs-dist/types/src/display/api.js";
 import type { DocumentParser } from "../application/ports.js";
 import { PermanentIngestionError } from "../domain/errors.js";
 
+export interface NativePdfPage {
+  pageNumber: number;
+  content: string;
+  hasRasterImage: boolean;
+}
+
+export interface NativePdfTextExtractor {
+  extract(path: string): Promise<NativePdfPage[]>;
+}
+
+export interface PdfPageOcr {
+  extract(path: string, pageNumber: number): Promise<string>;
+}
+
+export interface PdfParserOptions {
+  ocrEnabled: boolean;
+  ocrMinNativeCharacters: number;
+}
+
+function normalizeText(content: string): string {
+  return content
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function meaningfulCharacterCount(content: string): number {
+  return content.replace(/\s/g, "").length;
+}
+
 export class PdfParser implements DocumentParser {
+  constructor(
+    private readonly nativeText: NativePdfTextExtractor,
+    private readonly ocr: PdfPageOcr,
+    private readonly options: PdfParserOptions,
+  ) {}
+
   async parse(path: string) {
     try {
-      const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
-      const loadingTask = getDocument({ data: new Uint8Array(await readFile(path)), useSystemFonts: true });
-      const document = await loadingTask.promise;
+      const pages = await this.nativeText.extract(path);
       const blocks = [];
-      for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
-        const page = await document.getPage(pageNumber);
-        const text = await page.getTextContent();
-        const content = text.items
-          .filter((item): item is TextItem => "str" in item)
-          .map((item) => item.str)
-          .join(" ");
-        if (content.trim()) blocks.push({ content, locator: { format: "pdf" as const, page: pageNumber } });
-        page.cleanup();
+      for (const page of pages) {
+        const nativeContent = normalizeText(page.content);
+        const shouldOcr =
+          this.options.ocrEnabled &&
+          page.hasRasterImage &&
+          meaningfulCharacterCount(nativeContent) < this.options.ocrMinNativeCharacters;
+        const ocrContent = shouldOcr ? normalizeText(await this.ocr.extract(path, page.pageNumber)) : "";
+        const content = meaningfulCharacterCount(ocrContent) > meaningfulCharacterCount(nativeContent)
+          ? ocrContent
+          : nativeContent;
+        if (content) blocks.push({ content, locator: { format: "pdf" as const, page: page.pageNumber } });
       }
-      await loadingTask.destroy();
       return blocks;
     } catch (error) {
-      throw new PermanentIngestionError("Malformed or unreadable PDF document", { cause: error });
+      throw new PermanentIngestionError("Malformed, unreadable, or unextractable PDF document", { cause: error });
     }
   }
 }
-import { readFile } from "node:fs/promises";

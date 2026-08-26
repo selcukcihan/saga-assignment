@@ -50,6 +50,6 @@ export function bootstrap() {
     ingestion,
     chat,
     chunker: new FormatAwareChunker(config.chunking.targetTokens, config.chunking.overlapTokens),
-    parsers: new DefaultParserRegistry(),
+    parsers: new DefaultParserRegistry(config.pdf),
   };
 }
