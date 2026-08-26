@@ -100,7 +100,15 @@ export interface ChatRepository {
     answer: string;
     sources: readonly RetrievedChunk[];
   }): Promise<void>;
+  listSessions(): Promise<SessionSummary[]>;
   getSession(id: string): Promise<SessionView | null>;
+}
+
+export interface SessionSummary {
+  id: string;
+  createdAt: Date;
+  updatedAt: Date;
+  messageCount: number;
 }
 
 export interface SessionView {

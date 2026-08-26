@@ -33,6 +33,7 @@ Tier 2 and Tier 3 features are deliberately out of scope. In particular, the fir
 | Chat history including sources | Chat messages and citation records | Implemented and E2E tested |
 | `POST /ingest` | HTTP API | Implemented |
 | `POST /chat` | HTTP API | Implemented |
+| `GET /sessions` | HTTP API | Implemented and E2E tested |
 | `GET /sessions/{id}` | HTTP API | Implemented |
 | Chunking strategy and rationale | Format-aware chunking with an 800-token target and 100-token overlap | Default decided; configurable and subject to evaluation |
 | Vector semantic search | pgvector HNSW cosine search, top 5 by default | Default decided; configurable and subject to evaluation |
@@ -71,8 +72,8 @@ flowchart LR
     API -->|"messages + citations"| DB
     API -->|"answer + sources"| Client
 
-    Client -->|"GET /sessions/:id"| API
-    API -->|"conversation history"| DB
+    Client -->|"GET /sessions or /sessions/:id"| API
+    API -->|"session summaries or conversation history"| DB
 ```
 
 ### Component Responsibilities
@@ -123,7 +124,7 @@ The first version will perform a single vector retrieval step. Follow-up rewriti
 
 ### Conversation History
 
-`GET /sessions/{id}` will return the complete ordered conversation history, including user messages, assistant responses, and the sources associated with each response. Pagination is intentionally omitted from the assignment version to keep the API small. An unknown session returns `404 Not Found`.
+`GET /sessions` returns lightweight summaries ordered by most recent activity so a reviewer can discover session identifiers while testing externally. `GET /sessions/{id}` returns the complete ordered conversation history, including user messages, assistant responses, and the sources associated with each response. Pagination is intentionally omitted from the assignment version to keep the API small; a production list endpoint would use cursor pagination. An unknown session identifier returns `404 Not Found`.
 
 ## API Surface
 
@@ -134,6 +135,7 @@ The API intentionally contains only the endpoints needed by the core assignment.
 | `POST /ingest` | Upload one document and enqueue processing | `202 Accepted` | Implemented |
 | `GET /jobs/{id}` | Retrieve ingestion progress and sanitized failure information | `200 OK` | Implemented |
 | `POST /chat` | Ask a question across all ready documents; create a session if `session_id` is omitted | `200 OK` | Implemented |
+| `GET /sessions` | List session summaries, newest activity first | `200 OK` | Implemented |
 | `GET /sessions/{id}` | Retrieve the complete ordered history and citations | `200 OK` | Implemented |
 
 Common error categories are invalid input (`400`), unsupported document type (`415`), missing resource (`404`), payload too large (`413`), dependency failure (`503`), and unexpected server failure (`500`).
@@ -205,6 +207,25 @@ curl -X POST http://localhost:3000/chat \
 ```
 
 Locators use pages for PDF, paragraph ranges and headings for DOCX, row ranges for CSV, and JSON paths for JSON. Sources always reference persisted retrieved chunks; clients do not need to parse citation markers from generated prose.
+
+### `GET /sessions`
+
+```bash
+curl http://localhost:3000/sessions
+```
+
+```json
+{
+  "sessions": [
+    {
+      "id": "0dd08806-8bf8-463a-9d0b-e6cc388f2593",
+      "created_at": "2026-08-26T12:00:00.000Z",
+      "updated_at": "2026-08-26T12:02:00.000Z",
+      "message_count": 4
+    }
+  ]
+}
+```
 
 ### `GET /sessions/{id}`
 
@@ -401,7 +422,7 @@ The trade-off is that a Docker volume is a single-host storage mechanism. A prod
 
 The assignment version has one shared knowledge corpus. Every chat searches all successfully indexed (`ready`) document versions; clients do not select documents, collections, workspaces, or tenants. This intentionally minimizes the API, but it is not an acceptable production authorization model.
 
-There is no session-creation endpoint. `POST /chat` accepts an optional `session_id`: omitting it creates and returns a new session, while supplying it continues an existing session. This leaves the API at four endpoints including the required job-status endpoint.
+There is no session-creation endpoint. `POST /chat` accepts an optional `session_id`: omitting it creates and returns a new session, while supplying it continues an existing session. `GET /sessions` is a small reviewer convenience endpoint rather than a separate session lifecycle API. This leaves the API at five endpoints including the required job-status endpoint.
 
 ### Design Patterns - Decided
 
@@ -482,8 +503,9 @@ The main end-to-end scenarios are:
 2. Ask one deterministic grounded question per repository file; verify explicit answer facts and the expected filename/locator are returned.
 3. Ask a grounded question after ingestion; verify that the response contains an answer, valid chunk-backed citations, and a returned `session_id`.
 4. Continue the session with that identifier and retrieve the persisted ordered history with sources.
-5. Reject an unsupported or malformed upload with the documented error envelope.
-6. Simulate a provider/parser failure and verify retry/final failed-job behavior without exposing internal error details.
+5. List session summaries; verify the most recently active session and its message count.
+6. Reject an unsupported or malformed upload with the documented error envelope.
+7. Simulate a provider/parser failure and verify retry/final failed-job behavior without exposing internal error details.
 
 Assertions target stable behavior and persisted relationships, not exact natural-language wording. The end-to-end environment starts from isolated database and upload volumes, then removes them, so runs do not depend on previous state.
 

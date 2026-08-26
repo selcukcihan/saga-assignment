@@ -3,6 +3,7 @@ import type {
   ChatRepository,
   GenerationMessage,
   RetrievedChunk,
+  SessionSummary,
   SessionView,
 } from "../../application/ports.js";
 import type { Citation, SourceLocator } from "../../domain/documents.js";
@@ -32,6 +33,13 @@ interface SourceRow {
   similarity: number;
   source_locator: SourceLocator;
   content: string;
+}
+
+interface SessionSummaryRow {
+  id: string;
+  created_at: Date;
+  updated_at: Date;
+  message_count: number;
 }
 
 function vectorLiteral(values: readonly number[]): string {
@@ -127,6 +135,22 @@ export class PostgresChatRepository implements ChatRepository {
     } finally {
       client.release();
     }
+  }
+
+  async listSessions(): Promise<SessionSummary[]> {
+    const result = await this.pool.query<SessionSummaryRow>(
+      `SELECT s.id, s.created_at, s.updated_at, COUNT(m.id)::int AS message_count
+         FROM sessions s
+         LEFT JOIN messages m ON m.session_id = s.id
+        GROUP BY s.id, s.created_at, s.updated_at
+        ORDER BY s.updated_at DESC, s.id`,
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      messageCount: Number(row.message_count),
+    }));
   }
 
   async getSession(id: string): Promise<SessionView | null> {

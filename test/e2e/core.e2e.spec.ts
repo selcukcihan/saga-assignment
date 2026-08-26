@@ -159,6 +159,18 @@ describe.sequential("core API", () => {
     expect(history.messages[3]?.sources.length).toBeGreaterThan(0);
   });
 
+  it("lists session summaries for external inspection", async () => {
+    const response = await fetch(`${api}/sessions`);
+    expect(response.status).toBe(200);
+    const result = await response.json() as {
+      sessions: Array<{ id: string; created_at: string; updated_at: string; message_count: number }>;
+    };
+
+    expect(result.sessions[0]).toMatchObject({ id: sessionId, message_count: 4 });
+    expect(Number.isNaN(Date.parse(result.sessions[0]!.created_at))).toBe(false);
+    expect(Number.isNaN(Date.parse(result.sessions[0]!.updated_at))).toBe(false);
+  });
+
   it("returns the documented error envelope for unsupported uploads", async () => {
     const response = await upload("notes.txt", "unsupported", "text/plain");
     expect(response.status).toBe(415);

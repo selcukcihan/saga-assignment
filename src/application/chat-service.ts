@@ -54,6 +54,10 @@ export class ChatService {
     if (!session) throw new NotFoundError("Session");
     return session;
   }
+
+  async listSessions() {
+    return this.repository.listSessions();
+  }
 }
 
 function formatLocator(locator: { page?: number; row_start?: number; json_path?: string; paragraph_start?: number }) {

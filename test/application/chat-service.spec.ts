@@ -19,6 +19,7 @@ function setup() {
     recentMessages: vi.fn().mockResolvedValue([]),
     search: vi.fn().mockResolvedValue([source]),
     saveExchange: vi.fn(),
+    listSessions: vi.fn().mockResolvedValue([]),
     getSession: vi.fn(),
   } satisfies ChatRepository;
   const embeddings = { provider: "test", model: "test", dimensions: 2, embed: vi.fn().mockResolvedValue([[1, 0]]) } satisfies EmbeddingGateway;
@@ -60,5 +61,22 @@ describe("ChatService", () => {
 
     await expect(service.chat({ question: "Hello", sessionId: "missing" })).rejects.toMatchObject({ status: 404 });
     expect(deps.embeddings.embed).not.toHaveBeenCalled();
+  });
+
+  it("lists session summaries without invoking model dependencies", async () => {
+    const deps = setup();
+    const sessions = [{
+      id: "session-id",
+      createdAt: new Date("2026-08-26T12:00:00.000Z"),
+      updatedAt: new Date("2026-08-26T12:01:00.000Z"),
+      messageCount: 4,
+    }];
+    deps.repository.listSessions.mockResolvedValue(sessions);
+    const service = new ChatService(deps.repository, deps.embeddings, deps.generation, deps.newId, 5, 10);
+
+    await expect(service.listSessions()).resolves.toEqual(sessions);
+    expect(deps.repository.listSessions).toHaveBeenCalledOnce();
+    expect(deps.embeddings.embed).not.toHaveBeenCalled();
+    expect(deps.generation.generate).not.toHaveBeenCalled();
   });
 });

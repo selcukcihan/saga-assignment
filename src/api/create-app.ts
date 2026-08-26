@@ -145,6 +145,18 @@ export function createApp(dependencies: AppDependencies) {
     });
   });
 
+  app.get("/sessions", async (_request, response) => {
+    const sessions = await dependencies.chat.listSessions();
+    response.json({
+      sessions: sessions.map((session) => ({
+        id: session.id,
+        created_at: session.createdAt.toISOString(),
+        updated_at: session.updatedAt.toISOString(),
+        message_count: session.messageCount,
+      })),
+    });
+  });
+
   app.get("/sessions/:id", async (request, response) => {
     const id = uuidParameter.parse(request.params["id"]);
     const session = await dependencies.chat.getSession(id);
