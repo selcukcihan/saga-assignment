@@ -1,0 +1,63 @@
+x-test-ai-environment: &test-ai-environment
+  EMBEDDING_API_KEY: test-key
+  EMBEDDING_BASE_URL: http://fake-ai:8080/v1
+  EMBEDDING_MODEL: fake-embedding
+  EMBEDDING_DIMENSIONS: 1536
+  GENERATION_API_KEY: test-key
+  GENERATION_BASE_URL: http://fake-ai:8080/v1
+  GENERATION_MODEL: fake-generation
+  LOG_LEVEL: warn
+  WORKER_POLL_INTERVAL_MS: 100
+  WORKER_RETRY_BASE_SECONDS: 1
+
+services:
+  api:
+    environment:
+      <<: [*test-ai-environment]
+      DATABASE_URL: postgres://saga:saga@postgres:5432/saga
+      UPLOAD_DIR: /data/uploads
+    ports: !reset []
+    depends_on:
+      fake-ai:
+        condition: service_healthy
+
+  worker:
+    environment:
+      <<: [*test-ai-environment]
+      DATABASE_URL: postgres://saga:saga@postgres:5432/saga
+      UPLOAD_DIR: /data/uploads
+    depends_on:
+      fake-ai:
+        condition: service_healthy
+
+  fake-ai:
+    image: node:24.13.1-bookworm-slim
+    working_dir: /app
+    command: ["node", "test/fake-ai/server.mjs"]
+    volumes:
+      - .:/app:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 1s
+      timeout: 2s
+      retries: 20
+
+  test-runner:
+    build:
+      context: .
+      target: test
+    command: ["npx", "vitest", "run", "--project", "e2e"]
+    environment:
+      API_BASE_URL: http://api:3000
+    depends_on:
+      api:
+        condition: service_healthy
+      worker:
+        condition: service_started
+    profiles: ["e2e"]
