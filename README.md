@@ -26,7 +26,7 @@ Tier 2 and Tier 3 features are deliberately out of scope. In particular, the fir
 
 | Assignment requirement | Implemented location | Status |
 | --- | --- | --- |
-| PDF, DOCX, CSV, and JSON ingestion | Ingestion API, native parsers, selective local PDF OCR, ingestion worker | Implemented and E2E tested |
+| PDF, DOCX, CSV, and JSON ingestion | Ingestion API, native parsers, selective local PDF OCR, ingestion worker | Implemented; all formats E2E tested and OCR fallback unit tested |
 | Asynchronous ingestion with job status | PostgreSQL-backed job queue and `GET /jobs/{id}` | Implemented and E2E tested |
 | Chunk storage with embeddings | PostgreSQL `chunks` table with a pgvector column | Implemented with Drizzle migration |
 | Session management | `POST /chat` creates a session when `session_id` is omitted | Implemented and E2E tested |
@@ -478,14 +478,24 @@ The test profile uses a deterministic OpenAI-compatible fake service for embeddi
 
 The main end-to-end scenarios are:
 
-1. Upload representative PDF, DOCX, CSV, and JSON files; observe `202`, a queued/running job, and eventual completion.
-2. Ask which formats the image-backed assignment PDF requires; verify OCR recovers PDF, DOCX, CSV, and JSON and returns a page-one citation.
+1. Upload the repository's representative PDF, DOCX, and JSON files plus a minimal CSV; observe `202`, a queued/running job, and eventual completion.
+2. Ask one deterministic grounded question per repository file; verify explicit answer facts and the expected filename/locator are returned.
 3. Ask a grounded question after ingestion; verify that the response contains an answer, valid chunk-backed citations, and a returned `session_id`.
 4. Continue the session with that identifier and retrieve the persisted ordered history with sources.
 5. Reject an unsupported or malformed upload with the documented error envelope.
 6. Simulate a provider/parser failure and verify retry/final failed-job behavior without exposing internal error details.
 
 Assertions target stable behavior and persisted relationships, not exact natural-language wording. The end-to-end environment starts from isolated database and upload volumes, then removes them, so runs do not depend on previous state.
+
+The grounded fixture cases are declared together in `test/e2e/core.e2e.spec.ts`, including the question, human-readable expected answer, stable answer fragments, filename, and source locator:
+
+| Repository fixture | Question | Expected facts |
+| --- | --- | --- |
+| `test/files/selcukcihan.pdf` | What software did Selçuk create while working at Serverless Inc.? | Python AWS Lambda SDK; Serverless Console; PDF page 1 |
+| `test/files/docx-test.docx` | Where should figure captions and descriptions be placed in the CMS user manual template? | Left-aligned; below the figure; alternative text; DOCX source |
+| `test/files/asya-genc-cv.json` | At which company and during what period did Asya Genç work as a Software Engineering Intern? | SabancıDx; Summer 2025; `$.experience[0]` |
+
+The CSV remains a small in-memory ingestion smoke fixture because no CSV file is currently present under `test/files/`. Error-path inputs remain synthetic so their malformed or provider-failure behavior is obvious and intentional.
 
 ### Test Commands
 

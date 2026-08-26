@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 
 const api = process.env["API_BASE_URL"] ?? "http://127.0.0.1:3000";
@@ -18,6 +17,46 @@ interface JobResponse {
 }
 
 type FixtureContent = string | Uint8Array;
+
+interface KnowledgeFixture {
+  path: string;
+  filename: string;
+  mediaType: string;
+  question: string;
+  expectedAnswer: string;
+  expectedAnswerFragments: string[];
+  expectedLocator: Record<string, string | number>;
+}
+
+const knowledgeFixtures: KnowledgeFixture[] = [
+  {
+    path: "test/files/selcukcihan.pdf",
+    filename: "selcukcihan.pdf",
+    mediaType: "application/pdf",
+    question: "What software did Selçuk create while working at Serverless Inc.?",
+    expectedAnswer: "He created the Python AWS Lambda SDK for Serverless Console.",
+    expectedAnswerFragments: ["Python AWS Lambda SDK", "Serverless Console"],
+    expectedLocator: { format: "pdf", page: 1 },
+  },
+  {
+    path: "test/files/docx-test.docx",
+    filename: "docx-test.docx",
+    mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    question: "Where should figure captions and descriptions be placed in the CMS user manual template?",
+    expectedAnswer: "They should be left-aligned below the figure, with alternative text for Section 508 compliance.",
+    expectedAnswerFragments: ["left-aligned", "below", "alternative text"],
+    expectedLocator: { format: "docx" },
+  },
+  {
+    path: "test/files/asya-genc-cv.json",
+    filename: "asya-genc-cv.json",
+    mediaType: "application/json",
+    question: "At which company and during what period did Asya Genç work as a Software Engineering Intern?",
+    expectedAnswer: "She worked at SabancıDx during Summer 2025.",
+    expectedAnswerFragments: ["SabancıDx", "Summer 2025"],
+    expectedLocator: { format: "json", json_path: "$.experience[0]" },
+  },
+];
 
 async function upload(filename: string, content: FixtureContent, mediaType: string): Promise<Response> {
   const form = new FormData();
@@ -44,32 +83,17 @@ async function waitForJob(jobId: string, timeoutMs = 30_000): Promise<JobRespons
   throw new Error(`Job ${jobId} did not finish within ${timeoutMs}ms`);
 }
 
-async function docxFixture(): Promise<Uint8Array> {
-  const zip = new JSZip();
-  zip.file(
-    "[Content_Types].xml",
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
-  );
-  zip.folder("_rels")!.file(
-    ".rels",
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
-  );
-  zip.folder("word")!.file(
-    "document.xml",
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Saga DOCX handbook</w:t></w:r></w:p><w:p><w:r><w:t>The review workflow uses artificial intelligence to organize legal knowledge.</w:t></w:r></w:p><w:sectPr/></w:body></w:document>',
-  );
-  return zip.generateAsync({ type: "uint8array" });
-}
-
 describe.sequential("core API", () => {
   let sessionId: string;
 
   it("asynchronously ingests PDF, DOCX, CSV, and JSON", async () => {
     const fixtures: Array<[string, FixtureContent, string]> = [
-      ["assignment.pdf", new Uint8Array(await readFile("assignment.pdf")), "application/pdf"],
-      ["handbook.docx", await docxFixture(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+      ...await Promise.all(knowledgeFixtures.map(async (fixture) => [
+        fixture.filename,
+        new Uint8Array(await readFile(fixture.path)),
+        fixture.mediaType,
+      ] as [string, FixtureContent, string])),
       ["people.csv", "name,role\nAda,Engineer\nGrace,Lead\n", "text/csv"],
-      ["facts.json", JSON.stringify({ company: "Saga Legal", product: "AI legal technology" }), "application/json"],
     ];
 
     for (const [filename, content, mediaType] of fixtures) {
@@ -82,23 +106,26 @@ describe.sequential("core API", () => {
     }
   });
 
-  it("extracts useful text from the image-backed assignment PDF through OCR", async () => {
+  it.each(knowledgeFixtures)("answers the deterministic question for $filename", async (fixture) => {
     const response = await fetch(`${api}/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ question: "Which document formats must the core API support?" }),
+      body: JSON.stringify({ question: fixture.question }),
     });
     expect(response.status).toBe(200);
     const result = await response.json() as {
       answer: string;
       sources: Array<{ filename: string; locator: { format: string; page?: number } }>;
     };
-    expect(result.answer).toMatch(/PDF/i);
-    expect(result.answer).toMatch(/DOCX/i);
-    expect(result.answer).toMatch(/CSV/i);
-    expect(result.answer).toMatch(/JSON/i);
+    for (const fragment of fixture.expectedAnswerFragments) {
+      expect(fixture.expectedAnswer).toContain(fragment);
+      expect(result.answer).toContain(fragment);
+    }
     expect(result.sources).toEqual(expect.arrayContaining([
-      expect.objectContaining({ filename: "assignment.pdf", locator: expect.objectContaining({ format: "pdf", page: 1 }) }),
+      expect.objectContaining({
+        filename: fixture.filename,
+        locator: expect.objectContaining(fixture.expectedLocator),
+      }),
     ]));
   });
 
@@ -106,7 +133,7 @@ describe.sequential("core API", () => {
     const firstResponse = await fetch(`${api}/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ question: "What does Saga Legal build?" }),
+      body: JSON.stringify({ question: knowledgeFixtures[0]!.question }),
     });
     expect(firstResponse.status).toBe(200);
     const first = await firstResponse.json() as { session_id: string; answer: string; sources: Array<{ chunk_id: string; locator: unknown }> };
@@ -119,7 +146,7 @@ describe.sequential("core API", () => {
     const followUp = await fetch(`${api}/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ question: "What formats can it ingest?", session_id: sessionId }),
+      body: JSON.stringify({ question: "Which professional AWS certification does Selçuk hold?", session_id: sessionId }),
     });
     expect(followUp.status).toBe(200);
     await followUp.body?.cancel();
