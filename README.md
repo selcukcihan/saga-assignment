@@ -6,6 +6,57 @@ This repository contains a conversational retrieval-augmented generation (RAG) A
 
 The core implementation and Tier 2 follow-up context are complete. `docker compose up --build` starts PostgreSQL/pgvector, runs the Drizzle migration once, and then starts independent API and worker processes with shared upload storage. The remaining optional Tier 2 features and all Tier 3 features remain deliberately out of scope.
 
+## Quick Start and Manual Demo
+
+The shortest reviewer path uses the JSON fixture already committed to this repository. Docker is the only runtime dependency; the application services, PostgreSQL/pgvector, migrations, PDF/OCR tools, and Node.js runtime are contained in the Compose setup.
+
+Create the local configuration, set a real OpenAI API key, and start the stack:
+
+```bash
+cp .env.example .env
+# Edit .env and replace OPENAI_API_KEY=replace-with-your-key
+docker compose up --build
+```
+
+In a second terminal, upload the bundled fixture:
+
+```bash
+curl --fail-with-body -X POST http://localhost:3000/ingest \
+  -F 'file=@./test/files/asya-genc-cv.json'
+```
+
+The API returns `202 Accepted` with `document_id`, `job_id`, and `status`. Copy the returned `job_id` and poll until the job is `completed`:
+
+```bash
+JOB_ID='paste-the-returned-job-id-here'
+curl --fail-with-body "http://localhost:3000/jobs/$JOB_ID"
+```
+
+Ask a question grounded in that document:
+
+```bash
+curl --fail-with-body -X POST http://localhost:3000/chat \
+  -H 'content-type: application/json' \
+  -d '{"question":"At which company and during what period did Asya Genç work as a Software Engineering Intern?"}'
+```
+
+The answer should identify SabancıDx and Summer 2025 and include a source whose filename is `asya-genc-cv.json` and whose JSON locator is `$.experience[0]`. Copy the returned `session_id` to exercise the selected Tier 2 follow-up behavior:
+
+```bash
+SESSION_ID='paste-the-returned-session-id-here'
+curl --fail-with-body -X POST http://localhost:3000/chat \
+  -H 'content-type: application/json' \
+  -d "{\"session_id\":\"$SESSION_ID\",\"question\":\"What did she do there?\"}"
+```
+
+Inspect the persisted conversation and its citations:
+
+```bash
+curl --fail-with-body "http://localhost:3000/sessions/$SESSION_ID"
+```
+
+The commands above call the configured model providers and therefore require valid provider credentials. The end-to-end test profile instead uses a deterministic local OpenAI-compatible fake and needs no API key; see [Test Commands](#test-commands).
+
 ## Scope
 
 The implementation focuses on the assignment's core requirements plus one deliberately selected Tier 2 feature:
@@ -21,7 +72,7 @@ The implementation focuses on the assignment's core requirements plus one delibe
 - Persist user queries, generated answers, and their sources.
 - Provide validation, error handling, tests, Docker setup, API documentation, and architectural documentation.
 
-Other Tier 2 and Tier 3 features are deliberately out of scope. In particular, the first version will not include hybrid BM25 search, LLM query rewriting, smart routing, SSE streaming, re-ranking, Redis caching, or a formal retrieval evaluation suite.
+The specification offers five Tier 2 choices: hybrid search, query enhancement, smart routing, follow-up context, and streaming responses. This implementation deliberately selects follow-up context only. The other Tier 2 choices and all Tier 3 features are out of scope: the assignment version does not include hybrid BM25 search, LLM query rewriting, smart routing, SSE streaming, re-ranking, Redis caching, or a formal retrieval evaluation suite.
 
 ## Requirements Traceability
 
@@ -44,6 +95,11 @@ Other Tier 2 and Tier 3 features are deliberately out of scope. In particular, t
 | Validation and error handling | Zod at boundaries and centralized error mapping | Implemented |
 | Docker setup | One application image, API and worker services, pgvector PostgreSQL, and a shared upload volume | Implemented and verified |
 | Tests | Mirrored unit tests and Compose-based end-to-end tests using Vitest | Implemented |
+| README setup instructions | Quick Start and Manual Demo; Local Setup; `.env.example` | Documented |
+| README API documentation | API Surface with request, response, continuation, status, history, citation, and error examples | Documented |
+| README architecture overview | System diagram, component responsibilities, workflows, and data model | Documented |
+| README technical choices and trade-offs | Database, vector store, chunking, embedding model, design patterns, and async processing sections | Documented |
+| README production considerations | Scalability, security, monitoring/observability, and cost optimization | Documented |
 
 ## Architecture Overview
 
@@ -109,7 +165,7 @@ These responsibilities map to the implemented `src/api`, `src/application`, `src
 7. In a completion transaction, the worker inserts the chunks and embeddings and marks the document `ready` and the job `completed`.
 8. If processing fails, the worker records a sanitized error and either schedules a retry or marks the job `failed`, according to the retry policy.
 
-External parsing and embedding calls must not occur inside a long-running database transaction. Stable identifiers and idempotent inserts/upserts will allow a retried job to converge without duplicating chunks.
+External parsing and embedding calls do not occur inside a long-running database transaction. Stable identifiers and idempotent inserts/upserts allow a retried job to converge without duplicating chunks.
 
 The worker runs as a separate Docker Compose service using the same application image as the API. Operational defaults are a 500 ms polling interval, three attempts with exponential backoff, and a 120-second recoverable processing lease. These values are environment-configurable.
 
@@ -150,7 +206,7 @@ Send `multipart/form-data` with exactly one file in the `file` field. The extens
 
 ```bash
 curl -X POST http://localhost:3000/ingest \
-  -F 'file=@./contract.pdf'
+  -F 'file=@./test/files/asya-genc-cv.json'
 ```
 
 ```json
@@ -189,22 +245,22 @@ Omit `session_id` to create a session or supply a returned identifier to continu
 ```bash
 curl -X POST http://localhost:3000/chat \
   -H 'content-type: application/json' \
-  -d '{"question":"What are the termination terms?"}'
+  -d '{"question":"At which company and during what period did Asya Genç work as a Software Engineering Intern?"}'
 ```
 
 ```json
 {
   "session_id": "0dd08806-8bf8-463a-9d0b-e6cc388f2593",
-  "answer": "The agreement may be terminated with 30 days notice [1].",
+  "answer": "Asya Genç worked as a Software Engineering Intern at SabancıDx in Summer 2025 [1].",
   "sources": [
     {
       "chunk_id": "d57f2e69-d60a-5b01-a871-c53ada3182da",
       "document_id": "51ca0f12-2ca7-4bce-a7f2-daf768b17eef",
-      "filename": "contract.pdf",
+      "filename": "asya-genc-cv.json",
       "rank": 1,
       "similarity": 0.84,
-      "locator": { "format": "pdf", "page": 4 },
-      "excerpt": "Either party may terminate this agreement..."
+      "locator": { "format": "json", "json_path": "$.experience[0]" },
+      "excerpt": "{\"title\":\"Software Engineering Intern\",\"company\":\"SabancıDx\",\"dates\":\"Summer 2025\",\"url\":\"\"}"
     }
   ]
 }
@@ -334,9 +390,9 @@ Compared with executing `tsc` output directly, esbuild adds a build dependency a
 
 ### Express - Decided
 
-Express will provide the HTTP layer. It has a small conceptual footprint and keeps the exercise focused on ingestion, retrieval, persistence, and architectural boundaries. Express 5 also forwards rejected promises from asynchronous handlers to error middleware.
+Express provides the HTTP layer. It has a small conceptual footprint and keeps the exercise focused on ingestion, retrieval, persistence, and architectural boundaries. Express 5 also forwards rejected promises from asynchronous handlers to error middleware.
 
-Compared with Fastify, Express provides less built-in schema-based validation and serialization. Compared with NestJS, it provides much less framework structure. We accept that trade-off and will make validation, application-service boundaries, dependency construction, and error mapping explicit.
+Compared with Fastify, Express provides less built-in schema-based validation and serialization. Compared with NestJS, it provides much less framework structure. We accept that trade-off and make validation, application-service boundaries, dependency construction, and error mapping explicit.
 
 ### PostgreSQL Instead of SQLite - Decided
 
@@ -364,7 +420,7 @@ The implementation uses an HNSW index with cosine distance and retrieves the top
 
 ### Drizzle Instead of Prisma - Decided
 
-Drizzle will provide type-safe TypeScript database access, schema definitions, and migrations. It was selected because it remains close to SQL, supports pgvector column types and indexes directly, and allows explicit control over transactional job-claiming queries.
+Drizzle provides type-safe TypeScript database access, schema definitions, and migrations. It was selected because it remains close to SQL, supports pgvector column types and indexes directly, and allows explicit control over transactional job-claiming queries.
 
 Prisma was also considered. Its generated client and schema language are approachable, but it introduces a larger abstraction and generation step. For this service, direct visibility into PostgreSQL, pgvector, and queue-locking behavior is more valuable.
 
@@ -372,7 +428,7 @@ Drizzle still requires some database-specific SQL. The migration explicitly enab
 
 ### node-postgres - Decided
 
-Drizzle will connect to PostgreSQL through `node-postgres` (`pg`). Its explicit pool and checked-out-client APIs fit the service's need to control transaction boundaries for job claiming, chunk/vector insertion, and chat-history persistence.
+Drizzle connects to PostgreSQL through `node-postgres` (`pg`). Its explicit pool and checked-out-client APIs fit the service's need to control transaction boundaries for job claiming, chunk/vector insertion, and chat-history persistence.
 
 `postgres.js` was also considered and offers a concise API, but using `node-postgres` keeps connection-pool and transaction ownership visible in the infrastructure layer. Code that begins a transaction executes every statement through the same checked-out client and releases that client in a `finally` block. Pool sizing and acquisition, statement, and idle timeouts are environment-configurable; Compose makes migration startup ordering explicit.
 
@@ -401,9 +457,11 @@ The current splitter uses a deterministic estimate of four normalized characters
 
 ### Configurable Embedding Provider - Default Decided
 
-OpenAI is the default provider, using `text-embedding-3-small` as the initial cost-conscious embedding model. Provider base URL, API key, model name, batch size, timeout, and expected dimensions come from validated environment configuration. The embedding gateway depends on an application interface rather than exposing the OpenAI SDK to application services.
+OpenAI is the default provider, using `text-embedding-3-small` with 1,536 dimensions. It is a pragmatic assignment default because embedding requests are usually the highest-volume model operation in ingestion and retrieval: the smaller model reduces cost and latency while providing sufficient general-purpose semantic quality for the supplied heterogeneous fixtures. Its widely supported OpenAI embeddings contract also makes the default straightforward for reviewers to run. This is a starting assumption, not a measured claim that it is the best model for legal retrieval; a production choice requires evaluation against representative legal questions, documents, citation recall, latency, and cost.
 
-An OpenAI-compatible local endpoint may replace the hosted provider without changing application services. Embedding dimensions are nevertheless a database concern: the pgvector schema uses the default model's 1,536 dimensions. Switching to a local model with a different dimension requires a schema/index migration and complete document re-index; arbitrary models cannot be mixed in one index. The system persists the embedding provider, model, and dimension with indexed document versions so incompatibility is explicit.
+Provider base URL, API key, model name, batch size, timeout, and expected dimensions come from validated environment configuration. The embedding gateway depends on an application interface rather than exposing the OpenAI SDK to application services. This keeps hosted OpenAI and OpenAI-compatible local endpoints behind the same application boundary.
+
+An OpenAI-compatible local endpoint may replace the hosted provider without changing application services. A local model can improve data control and remove per-request provider cost, but adds model hosting, capacity planning, and quality evaluation. Embedding dimensions are also a database concern: the pgvector schema uses the default model's 1,536 dimensions. Switching to a local model with a different dimension requires a schema/index migration and complete document re-index; arbitrary models cannot be mixed in one index. The system persists the embedding provider, model, and dimension with indexed document versions so incompatibility is explicit.
 
 ### Configurable Generation Provider - Default Decided
 
@@ -446,13 +504,13 @@ The trade-off is that deterministic concatenation does not actually resolve pron
 
 The implementation uses patterns only where they clarify a real boundary:
 
-- Repository for persistence and retrieval operations.
-- Strategy for format-specific parsing and potentially chunking.
-- Factory or explicit registry for selecting a parser by media type.
-- Gateway/adapter for embedding and generation providers.
-- Dependency injection through explicit construction rather than a container framework.
+- **Repository:** PostgreSQL repositories implement application-facing persistence interfaces. Application workflows can express document, queue, chat, and retrieval operations without depending on Drizzle queries, while infrastructure tests remain separate from service unit tests.
+- **Strategy:** PDF, DOCX, CSV, and JSON parsers implement one `DocumentParser` contract. Each format can preserve its own source-location semantics without conditional parsing logic spreading into the worker.
+- **Registry:** `DefaultParserRegistry` maps a validated media type to the corresponding parser strategy. Selection has one explicit location, and adding a format does not alter the ingestion workflow.
+- **Gateway/Adapter:** embedding and generation gateways translate the provider's OpenAI-compatible protocol into small application interfaces. Provider configuration and errors do not leak into chat or ingestion services.
+- **Dependency Injection:** `bootstrap()` explicitly constructs and passes repositories, gateways, storage, clocks, and identifier functions. This makes dependencies visible and replaceable in unit tests without introducing a runtime container.
 
-Dependencies are passed explicitly through constructors and the bootstrap factory. A dependency-injection container and a generic base-repository hierarchy are intentionally excluded.
+These patterns isolate behavior that genuinely varies: persistence, document format, and model provider. A dependency-injection container and generic base-repository hierarchy are intentionally excluded because they would add indirection without reducing assignment complexity.
 
 ## Validation and Error Handling
 
@@ -474,7 +532,7 @@ Vitest is the TypeScript test runner. Unit tests are fast, deterministic, and ru
 
 ### Test Layout and Naming
 
-Unit tests live under the root `test/` directory and mirror the path under `src/` exactly. Production source files will not contain colocated test files.
+Unit tests live under the root `test/` directory and mirror the path under `src/` exactly. Production source files do not contain colocated test files.
 
 ```text
 src/application/chat-service.ts  -> test/application/chat-service.spec.ts
@@ -492,7 +550,7 @@ The mirrored path makes ownership obvious and allows a reviewer to move directly
 
 A unit specification tests one production module. Every direct dependency that crosses that module's boundary is replaced with a mock, stub, or small in-memory fake. Examples include repositories, clocks, identifier generators, filesystem access, parser libraries, embedding/generation gateways, and loggers.
 
-Unit tests will:
+Unit tests:
 
 - Exercise public behavior, outputs, state transitions, and meaningful collaborator interactions.
 - Inject dependencies through explicit interfaces where practical.
@@ -505,7 +563,7 @@ Pragmatism takes precedence over mock purity:
 
 - Pure helper functions and inert value objects do not need to be mocked.
 - Tests should not mock a module's private implementation or transitive dependencies.
-- We will not assert every internal call or duplicate TypeScript's type checking.
+- Do not assert every internal call or duplicate TypeScript's type checking.
 - If mocking removes the behavior that matters, the scenario belongs in an integration or end-to-end test.
 - Third-party parser behavior is verified with real fixtures at the end-to-end boundary; unit tests for our parser adapters focus on normalization, error translation, and source-location mapping.
 
@@ -550,7 +608,7 @@ npm run test:e2e          # build and run the isolated Compose test profile
 npm run test:all          # unit tests followed by end-to-end tests
 ```
 
-`npm test` remains the shortest and fastest developer feedback loop. Coverage is a diagnostic tool, not a target for meaningless tests; no blanket 100% threshold will be imposed. Critical orchestration, queue-state, retrieval, citation, and error-handling branches should nevertheless be covered deliberately.
+`npm test` remains the shortest and fastest developer feedback loop. Coverage is a diagnostic tool, not a target for meaningless tests; the project imposes no blanket 100% threshold. Critical orchestration, queue-state, retrieval, citation, and error-handling branches are nevertheless covered deliberately.
 
 ## Local Setup
 
