@@ -1,14 +1,14 @@
 # Multi-Source Knowledge API
 
-> Implemented core assignment, one focused Tier 2 feature, architecture record, and reviewer guide.
+> A self-contained conversational RAG service with asynchronous multi-format ingestion, source citations, and conversation-aware retrieval.
 
 This repository contains a conversational retrieval-augmented generation (RAG) API for ingesting PDF, DOCX, CSV, and JSON documents and answering questions with source citations and conversation context.
 
-The core implementation and Tier 2 follow-up context are complete. `docker compose up --build` starts PostgreSQL/pgvector, runs the Drizzle migration once, and then starts independent API and worker processes with shared upload storage. The remaining optional Tier 2 features and all Tier 3 features remain deliberately out of scope.
+`docker compose up --build` starts PostgreSQL/pgvector, runs the Drizzle migration once, and then starts independent API and worker processes with shared upload storage.
 
 ## Quick Start and Manual Demo
 
-The shortest reviewer path uses the JSON fixture already committed to this repository. Docker is the only runtime dependency; the application services, PostgreSQL/pgvector, migrations, PDF/OCR tools, and Node.js runtime are contained in the Compose setup.
+The shortest path uses the JSON fixture included in this repository. Docker is the only application runtime dependency; the application services, PostgreSQL/pgvector, migrations, PDF/OCR tools, and Node.js runtime are contained in the Compose setup.
 
 Create the local configuration, set a real OpenAI API key, and start the stack:
 
@@ -40,7 +40,7 @@ curl --fail-with-body -X POST http://localhost:3000/chat \
   -d '{"question":"At which company and during what period did Asya Genç work as a Software Engineering Intern?"}'
 ```
 
-The answer should identify SabancıDx and Summer 2025 and include a source whose filename is `asya-genc-cv.json` and whose JSON locator is `$.experience[0]`. Copy the returned `session_id` to exercise the selected Tier 2 follow-up behavior:
+The answer should identify SabancıDx and Summer 2025 and include a source whose filename is `asya-genc-cv.json` and whose JSON locator is `$.experience[0]`. Copy the returned `session_id` to continue the conversation with an ambiguous follow-up:
 
 ```bash
 SESSION_ID='paste-the-returned-session-id-here'
@@ -57,9 +57,9 @@ curl --fail-with-body "http://localhost:3000/sessions/$SESSION_ID"
 
 The commands above call the configured model providers and therefore require valid provider credentials. The end-to-end test profile instead uses a deterministic local OpenAI-compatible fake and needs no API key; see [Test Commands](#test-commands).
 
-## Scope
+## Capabilities and Limits
 
-The implementation focuses on the assignment's core requirements plus one deliberately selected Tier 2 feature:
+The service provides:
 
 - Ingest PDF, DOCX, CSV, and JSON documents.
 - Process ingestion asynchronously and expose job status.
@@ -72,34 +72,29 @@ The implementation focuses on the assignment's core requirements plus one delibe
 - Persist user queries, generated answers, and their sources.
 - Provide validation, error handling, tests, Docker setup, API documentation, and architectural documentation.
 
-The specification offers five Tier 2 choices: hybrid search, query enhancement, smart routing, follow-up context, and streaming responses. This implementation deliberately selects follow-up context only. The other Tier 2 choices and all Tier 3 features are out of scope: the assignment version does not include hybrid BM25 search, LLM query rewriting, smart routing, SSE streaming, re-ranking, Redis caching, or a formal retrieval evaluation suite.
+The current retrieval pipeline does not include hybrid BM25 search, LLM query rewriting, smart routing, SSE streaming, re-ranking, Redis caching, or a formal retrieval evaluation suite.
 
-## Requirements Traceability
+## Feature Matrix
 
-| Assignment requirement | Implemented location | Status |
+| Capability | Implementation | Verification |
 | --- | --- | --- |
 | PDF, DOCX, CSV, and JSON ingestion | Ingestion API, native parsers, selective local PDF OCR, ingestion worker | Implemented; all formats E2E tested and OCR fallback unit tested |
 | Asynchronous ingestion with job status | PostgreSQL-backed job queue and `GET /jobs/{id}` | Implemented and E2E tested |
 | Chunk storage with embeddings | PostgreSQL `chunks` table with a pgvector column | Implemented with Drizzle migration |
 | Session management | `POST /chat` creates a session when `session_id` is omitted | Implemented and E2E tested |
 | Chat history including sources | Chat messages and citation records | Implemented and E2E tested |
-| Tier 2 follow-up context | Retrieval query includes the most recent user/assistant exchange | Implemented and E2E tested |
+| Context-aware follow-up retrieval | Retrieval query includes the most recent user/assistant exchange | Implemented and E2E tested |
 | `POST /ingest` | HTTP API | Implemented |
 | `POST /chat` | HTTP API | Implemented |
 | `GET /sessions` | HTTP API | Implemented and E2E tested |
 | `GET /sessions/{id}` | HTTP API | Implemented |
-| Chunking strategy and rationale | Format-aware chunking with an 800-token target and 100-token overlap | Default decided; configurable and subject to evaluation |
-| Vector semantic search | pgvector HNSW cosine search, top 5 by default | Default decided; configurable and subject to evaluation |
+| Chunking strategy and rationale | Format-aware chunking with an 800-token target and 100-token overlap | Configurable default; evaluation recommended |
+| Vector semantic search | pgvector HNSW cosine search, top 5 by default | Configurable default; evaluation recommended |
 | Source citations | Format-specific source-location metadata and chat response contract | Implemented and persisted |
 | Database schema | Drizzle schema and migrations | Implemented |
 | Validation and error handling | Zod at boundaries and centralized error mapping | Implemented |
 | Docker setup | One application image, API and worker services, pgvector PostgreSQL, and a shared upload volume | Implemented and verified |
 | Tests | Mirrored unit tests and Compose-based end-to-end tests using Vitest | Implemented |
-| README setup instructions | Quick Start and Manual Demo; Local Setup; `.env.example` | Documented |
-| README API documentation | API Surface with request, response, continuation, status, history, citation, and error examples | Documented |
-| README architecture overview | System diagram, component responsibilities, workflows, and data model | Documented |
-| README technical choices and trade-offs | Database, vector store, chunking, embedding model, design patterns, and async processing sections | Documented |
-| README production considerations | Scalability, security, monitoring/observability, and cost optimization | Documented |
 
 ## Architecture Overview
 
@@ -152,7 +147,7 @@ flowchart LR
 
 These responsibilities map to the implemented `src/api`, `src/application`, `src/domain`, `src/infrastructure`, `src/parsers`, and `src/worker` modules.
 
-## Core Workflows
+## Workflows
 
 ### Asynchronous Ingestion
 
@@ -180,17 +175,17 @@ The worker runs as a separate Docker Compose service using the same application 
 7. The service produces an answer whose citations refer only to retrieved chunks.
 8. The user message, assistant answer, and source references are persisted before the response is returned.
 
-The service still performs a single vector retrieval step. LLM-based rewriting, hybrid search, re-ranking, and streaming remain excluded.
+The service performs a single vector retrieval step. LLM-based rewriting, hybrid search, re-ranking, and streaming are not part of the pipeline.
 
 ### Conversation History
 
-`GET /sessions` returns lightweight summaries ordered by most recent activity so a reviewer can discover session identifiers while testing externally. `GET /sessions/{id}` returns the complete ordered conversation history, including user messages, assistant responses, and the sources associated with each response. Pagination is intentionally omitted from the assignment version to keep the API small; a production list endpoint would use cursor pagination. An unknown session identifier returns `404 Not Found`.
+`GET /sessions` returns lightweight summaries ordered by most recent activity so clients can discover session identifiers. `GET /sessions/{id}` returns the complete ordered conversation history, including user messages, assistant responses, and the sources associated with each response. Pagination is omitted to keep the API small; a larger deployment should use cursor pagination. An unknown session identifier returns `404 Not Found`.
 
 ## API Surface
 
-The API intentionally contains only the endpoints needed by the assignment workflow and external reviewer inspection.
+The API surface is intentionally small and covers ingestion, job status, chat, and conversation inspection.
 
-| Method and path | Purpose | Expected success status | Decision state |
+| Method and path | Purpose | Expected success status | Status |
 | --- | --- | --- | --- |
 | `POST /ingest` | Upload one document and enqueue processing | `202 Accepted` | Implemented |
 | `GET /jobs/{id}` | Retrieve ingestion progress and sanitized failure information | `200 OK` | Implemented |
@@ -374,11 +369,11 @@ erDiagram
 
 The migration creates explicit document/job/message status enums, foreign keys, uniqueness and range constraints, queue-claim indexes, and the pgvector cosine HNSW index. Source locators are stored as JSONB because each format has different stable location fields. Chunk deletion is restricted once a message cites it, preserving citation integrity.
 
-## Technical Decisions and Trade-offs
+## Architecture Rationale and Trade-offs
 
-### TypeScript and Node.js - Decided
+### TypeScript and Node.js
 
-The service is written in TypeScript on Node.js. This matches the assignment preference and provides static checking across API contracts, application services, database schemas, and provider integrations.
+The service is written in TypeScript on Node.js, providing static checking across API contracts, application services, database schemas, and provider integrations.
 
 The implementation pins Node.js 24 LTS, uses npm and ES modules, and enables TypeScript strict mode. TypeScript uses `Bundler` module resolution, allowing extensionless relative imports while preserving standard extensionless package imports.
 
@@ -386,17 +381,17 @@ The implementation pins Node.js 24 LTS, uses npm and ES modules, and enables Typ
 
 The bundles include external source maps with embedded TypeScript source content and preserved function/class names. Production commands enable Node's source-map support, so application stack frames refer to the original `.ts` file and line rather than the generated bundle. Source maps are copied into the runtime image but are not exposed through the HTTP API. Production artifact access and server-side stack-trace logging must remain restricted because embedded source content is sensitive implementation data.
 
-Compared with executing `tsc` output directly, esbuild adds a build dependency and makes the emitted bundle less readable without its source map. The accepted benefit is extensionless source imports, smaller runtime artifacts, fast builds, and accurate TypeScript stack traces. Exact dependency versions are locked in the Docker image and lockfile.
+Compared with executing `tsc` output directly, esbuild adds a build dependency and makes the emitted bundle less readable without its source map. Its benefits are extensionless source imports, smaller runtime artifacts, fast builds, and accurate TypeScript stack traces. Exact dependency versions are locked in the Docker image and lockfile.
 
-### Express - Decided
+### Express
 
-Express provides the HTTP layer. It has a small conceptual footprint and keeps the exercise focused on ingestion, retrieval, persistence, and architectural boundaries. Express 5 also forwards rejected promises from asynchronous handlers to error middleware.
+Express provides the HTTP layer. It has a small conceptual footprint and keeps the service focused on ingestion, retrieval, persistence, and architectural boundaries. Express 5 also forwards rejected promises from asynchronous handlers to error middleware.
 
 Compared with Fastify, Express provides less built-in schema-based validation and serialization. Compared with NestJS, it provides much less framework structure. We accept that trade-off and make validation, application-service boundaries, dependency construction, and error mapping explicit.
 
-### PostgreSQL Instead of SQLite - Decided
+### PostgreSQL
 
-PostgreSQL replaces the initially considered SQLite design. SQLite would minimize setup, but PostgreSQL provides:
+PostgreSQL provides:
 
 - Concurrent database access suitable for separate API and worker processes.
 - Row-level locking and `SKIP LOCKED` for safe multi-worker job claiming.
@@ -404,43 +399,43 @@ PostgreSQL replaces the initially considered SQLite design. SQLite would minimiz
 - A single transactional boundary for relational data and embeddings.
 - A more credible production migration path.
 
-The cost is a required database service, health checking, credentials, migrations, and a persistent Docker volume. This is acceptable because reviewers can run the complete local environment with Docker Compose.
+Compared with SQLite, PostgreSQL requires a database service, health checking, credentials, migrations, and a persistent Docker volume. Docker Compose contains that operational overhead behind a single startup command.
 
-### pgvector Instead of Chroma or FAISS - Decided
+### pgvector
 
 Embeddings are stored in PostgreSQL using pgvector. This keeps chunks, source metadata, and embeddings in one transactional data store and allows retrieval results to be filtered and joined using ordinary SQL.
 
-Alternatives considered:
+Trade-offs against alternatives:
 
 - **Chroma** is a purpose-built vector database with a TypeScript client, but it would introduce a second persistent service and a dual-write consistency problem between PostgreSQL and Chroma.
 - **FAISS** provides high-performance similarity indexes, but it is a library rather than a transactional database. Metadata, persistence, synchronization, and TypeScript integration would become application responsibilities.
-- **A dedicated vector service such as Qdrant** may be appropriate when vector search must scale or be operated independently, but that separation is not justified for the initial workload.
+- **A dedicated vector service such as Qdrant** is useful when vector search must scale or be operated independently, but that separation is not justified for this workload.
 
-The implementation uses an HNSW index with cosine distance and retrieves the top five chunks. These are configurable starting values rather than quality claims. It uses pgvector's default HNSW tuning parameters and no hard similarity threshold; representative production data should determine future tuning.
+The implementation uses an HNSW index with cosine distance and retrieves the top five chunks. These are configurable defaults rather than quality claims. It uses pgvector's default HNSW tuning parameters and no hard similarity threshold; representative production data should determine tuning.
 
-### Drizzle Instead of Prisma - Decided
+### Drizzle
 
-Drizzle provides type-safe TypeScript database access, schema definitions, and migrations. It was selected because it remains close to SQL, supports pgvector column types and indexes directly, and allows explicit control over transactional job-claiming queries.
+Drizzle provides type-safe TypeScript database access, schema definitions, and migrations. It remains close to SQL, supports pgvector column types and indexes directly, and allows explicit control over transactional job-claiming queries.
 
-Prisma was also considered. Its generated client and schema language are approachable, but it introduces a larger abstraction and generation step. For this service, direct visibility into PostgreSQL, pgvector, and queue-locking behavior is more valuable.
+Prisma offers an approachable generated client and schema language, but introduces a larger abstraction and generation step. Direct visibility into PostgreSQL, pgvector, and queue-locking behavior is more valuable for this service.
 
-Drizzle still requires some database-specific SQL. The migration explicitly enables pgvector, and job claiming uses an explicit locking query. This is an accepted trade-off rather than an attempt to hide PostgreSQL-specific behavior behind the ORM.
+Drizzle still requires some database-specific SQL. The migration explicitly enables pgvector, and job claiming uses an explicit locking query. PostgreSQL-specific behavior remains visible rather than being hidden behind the ORM.
 
-### node-postgres - Decided
+### node-postgres
 
 Drizzle connects to PostgreSQL through `node-postgres` (`pg`). Its explicit pool and checked-out-client APIs fit the service's need to control transaction boundaries for job claiming, chunk/vector insertion, and chat-history persistence.
 
-`postgres.js` was also considered and offers a concise API, but using `node-postgres` keeps connection-pool and transaction ownership visible in the infrastructure layer. Code that begins a transaction executes every statement through the same checked-out client and releases that client in a `finally` block. Pool sizing and acquisition, statement, and idle timeouts are environment-configurable; Compose makes migration startup ordering explicit.
+`postgres.js` offers a concise API, but `node-postgres` keeps connection-pool and transaction ownership visible in the infrastructure layer. Code that begins a transaction executes every statement through the same checked-out client and releases that client in a `finally` block. Pool sizing and acquisition, statement, and idle timeouts are environment-configurable; Compose makes migration startup ordering explicit.
 
-### PostgreSQL-Backed Job Queue - Decided
+### PostgreSQL-Backed Job Queue
 
 The system uses an `ingestion_jobs` table rather than Redis, RabbitMQ, Kafka, or a hosted queue. Workers claim work with `FOR UPDATE SKIP LOCKED`, and document/job state changes remain visible in the same database.
 
-This choice minimizes infrastructure and provides durable jobs, but requires polling, retry/lease implementation, cleanup, and care to prevent queue traffic from competing with application traffic. A production system may move to a dedicated queue when throughput, delayed delivery, prioritization, or operational isolation justifies it.
+This design minimizes infrastructure and provides durable jobs, but requires polling, retry/lease implementation, cleanup, and care to prevent queue traffic from competing with application traffic. A production system may move to a dedicated queue when throughput, delayed delivery, prioritization, or operational isolation justifies it.
 
-The worker runs as a separate Docker Compose service using the same application image as the API. This preserves a real asynchronous process boundary while reviewers still start the entire system with one command. A dedicated broker is deliberately excluded from the assignment version.
+The worker runs as a separate Docker Compose service using the same application image as the API. This preserves a real asynchronous process boundary while keeping startup to one command. A dedicated broker is unnecessary at the current scale.
 
-### Configurable Format-Aware Chunking - Default Decided
+### Configurable Format-Aware Chunking
 
 The implementation uses conservative, replaceable defaults:
 
@@ -451,56 +446,56 @@ The implementation uses conservative, replaceable defaults:
 - Represent JSON objects or array elements with their JSON paths; recursively split oversized values.
 - Derive deterministic chunk identity from the document version, ordinal, and normalized-content hash.
 
-The overlap reduces the chance that an answer-bearing sentence is separated from its context. The 800-token target is small enough for precise citations while avoiding excessive embedding requests. These are sane defaults, not final retrieval tuning: size and overlap are configuration-backed and should be revisited against representative data.
+The overlap reduces the chance that an answer-bearing sentence is separated from its context. The 800-token target is small enough for precise citations while avoiding excessive embedding requests. Size and overlap are configuration-backed and require evaluation against representative data.
 
-The current splitter uses a deterministic estimate of four normalized characters per token rather than coupling chunking to one provider's tokenizer. PDF pages and JSON paths remain independent citation units; DOCX paragraphs and CSV rows may be grouped into ranges before oversized content is split at paragraph, sentence, or word boundaries. This approximation is simple and provider-neutral, but measured tokenization and retrieval evaluation would be the next tuning step.
+The splitter uses a deterministic estimate of four normalized characters per token rather than coupling chunking to one provider's tokenizer. PDF pages and JSON paths remain independent citation units; DOCX paragraphs and CSV rows may be grouped into ranges before oversized content is split at paragraph, sentence, or word boundaries. This approximation is simple and provider-neutral, but less exact than model-specific tokenization and requires retrieval evaluation.
 
-### Configurable Embedding Provider - Default Decided
+### Configurable Embedding Provider
 
-OpenAI is the default provider, using `text-embedding-3-small` with 1,536 dimensions. It is a pragmatic assignment default because embedding requests are usually the highest-volume model operation in ingestion and retrieval: the smaller model reduces cost and latency while providing sufficient general-purpose semantic quality for the supplied heterogeneous fixtures. Its widely supported OpenAI embeddings contract also makes the default straightforward for reviewers to run. This is a starting assumption, not a measured claim that it is the best model for legal retrieval; a production choice requires evaluation against representative legal questions, documents, citation recall, latency, and cost.
+OpenAI is the default provider, using `text-embedding-3-small` with 1,536 dimensions. Embedding requests are usually the highest-volume model operation in ingestion and retrieval, so the smaller model provides a practical balance of cost, latency, and general-purpose semantic quality. Its widely supported OpenAI embeddings contract also keeps setup straightforward. This default is not a measured claim that it is the best model for legal retrieval; model selection requires evaluation against representative legal questions, documents, citation recall, latency, and cost.
 
 Provider base URL, API key, model name, batch size, timeout, and expected dimensions come from validated environment configuration. The embedding gateway depends on an application interface rather than exposing the OpenAI SDK to application services. This keeps hosted OpenAI and OpenAI-compatible local endpoints behind the same application boundary.
 
 An OpenAI-compatible local endpoint may replace the hosted provider without changing application services. A local model can improve data control and remove per-request provider cost, but adds model hosting, capacity planning, and quality evaluation. Embedding dimensions are also a database concern: the pgvector schema uses the default model's 1,536 dimensions. Switching to a local model with a different dimension requires a schema/index migration and complete document re-index; arbitrary models cannot be mixed in one index. The system persists the embedding provider, model, and dimension with indexed document versions so incompatibility is explicit.
 
-### Configurable Generation Provider - Default Decided
+### Configurable Generation Provider
 
-OpenAI is the default provider, using `gpt-5.4-mini` as the initial balance of capability, latency, and cost. Provider base URL, API key, and model name are configurable independently from embedding settings. The generation gateway supports an OpenAI-compatible local endpoint and keeps provider-specific request and response formats out of the chat application service.
+OpenAI is the default provider, using `gpt-5.4-mini` to balance capability, latency, and cost. Provider base URL, API key, and model name are configurable independently from embedding settings. The generation gateway supports an OpenAI-compatible local endpoint and keeps provider-specific request and response formats out of the chat application service.
 
-Local compatibility is configuration-based, not a promise that every local server implements every OpenAI feature. The gateways use Chat Completions plus float embeddings as the small common surface required by this assignment; the deterministic E2E fake exercises both network contracts.
+Local compatibility is configuration-based, not a promise that every local server implements every OpenAI feature. The gateways use Chat Completions plus float embeddings as their small common surface; the deterministic E2E fake exercises both network contracts.
 
-### Parser Libraries - Decided
+### Parser Libraries
 
 - **PDF:** Mozilla PDF.js through `pdfjs-dist` for native page-level extraction. Pages containing raster images with fewer than 100 non-whitespace native characters fall back to Poppler rendering and local Tesseract OCR. OCR output replaces native text only when it recovers more content, and citations remain page-based.
-- **DOCX:** Mammoth, selected for established semantic DOCX-to-HTML extraction. DOCX page numbers are not stable, so citations use headings and paragraph positions.
-- **CSV:** `csv-parse`, selected over Papa Parse for its server-side Node streaming API and strong package adoption, despite Papa Parse having more GitHub stars.
-- **JSON:** the built-in `JSON.parse`, followed by application validation and traversal; an external parser is unnecessary for the assignment's non-streaming JSON scope.
+- **DOCX:** Mammoth provides established semantic DOCX-to-HTML extraction. DOCX page numbers are not stable, so citations use headings and paragraph positions.
+- **CSV:** `csv-parse` provides a server-side Node streaming API, strong package adoption, and a better fit for backend ingestion than Papa Parse, despite Papa Parse having more GitHub stars.
+- **JSON:** the built-in `JSON.parse`, followed by application validation and traversal; an external parser is unnecessary for the current non-streaming JSON workflow.
 
-Popularity was used as a signal, not the sole criterion. Maintenance activity, server-side suitability, TypeScript usability, streaming behavior, and the citation metadata we need were also considered. Exact dependency versions are pinned in `package-lock.json`.
+Library selection weighs popularity alongside maintenance activity, server-side suitability, TypeScript usability, streaming behavior, and the required citation metadata. Exact dependency versions are pinned in `package-lock.json`.
 
 Selective OCR closes an important PDF edge case: a visually text-heavy PDF may store its main page as an image while exposing only a few overlay labels in its text layer. Running OCR only on suspicious image-bearing pages avoids the cost on normal digital PDFs. Poppler and Tesseract increase the application image size and ingestion latency, but keep legal document pages local rather than introducing another external processor. OCR enablement, native-text threshold, DPI, language, and timeout are configurable.
 
-### Shared Docker Volume for Documents - Decided
+### Shared Docker Volume for Documents
 
-The API writes accepted uploads to a named Docker volume mounted into both API and worker services. PostgreSQL stores document metadata and processing state, not the original file bytes. This is simple for reviewers and avoids bloating the relational database.
+The API writes accepted uploads to a named Docker volume mounted into both API and worker services. PostgreSQL stores document metadata and processing state, not the original file bytes. This keeps local operation simple and avoids bloating the relational database.
 
 The trade-off is that a Docker volume is a single-host storage mechanism. A production deployment would replace the filesystem adapter with durable object storage while keeping the ingestion application interface unchanged.
 
-### Global Document Corpus and Minimal Session API - Decided
+### Global Document Corpus and Minimal Session API
 
-The assignment version has one shared knowledge corpus. Every chat searches all successfully indexed (`ready`) document versions; clients do not select documents, collections, workspaces, or tenants. This intentionally minimizes the API, but it is not an acceptable production authorization model.
+The service has one shared knowledge corpus. Every chat searches all successfully indexed (`ready`) document versions; clients do not select documents, collections, workspaces, or tenants. This minimizes the API, but it is not an acceptable production authorization model.
 
-There is no session-creation endpoint. `POST /chat` accepts an optional `session_id`: omitting it creates and returns a new session, while supplying it continues an existing session. `GET /sessions` is a small reviewer convenience endpoint rather than a separate session lifecycle API. This leaves the API at five endpoints including the required job-status endpoint.
+There is no session-creation endpoint. `POST /chat` accepts an optional `session_id`: omitting it creates and returns a new session, while supplying it continues an existing session. `GET /sessions` exposes session discovery without adding a separate lifecycle API. The complete API contains five endpoints.
 
-### Deterministic Follow-up Context - Decided
+### Deterministic Follow-up Context
 
-The selected Tier 2 feature is history-aware retrieval for follow-up questions such as “What did she do there?”. For a continuing session, the retrieval text contains the latest persisted user message, the latest assistant response, and the current user question with explicit labels. Only this most recent exchange is used for retrieval, while the generation model still receives the configured conversation-history window. First-turn retrieval remains identical to the core implementation.
+History-aware retrieval supports follow-up questions such as “What did she do there?”. For a continuing session, the retrieval text contains the latest persisted user message, the latest assistant response, and the current user question with explicit labels. Only this most recent exchange is used for retrieval, while the generation model still receives the configured conversation-history window. First-turn retrieval uses the question unchanged.
 
 This approach adds no extra model request, remains provider-neutral, and is deterministic enough to verify at the unit and end-to-end boundaries. Limiting retrieval context to one exchange also reduces topic pollution and embedding input growth compared with embedding the full conversation.
 
-The trade-off is that deterministic concatenation does not actually resolve pronouns and may carry an inaccurate earlier answer into retrieval. It can also bias a genuine topic change toward the previous subject. A production version should evaluate follow-up detection and LLM-based standalone-question rewriting against representative conversations before accepting their additional latency, cost, and failure mode. The assignment version favors the smallest implementation that materially improves conversational retrieval.
+The trade-off is that deterministic concatenation does not actually resolve pronouns and may carry an inaccurate earlier answer into retrieval. It can also bias a genuine topic change toward the previous subject. Follow-up detection and LLM-based standalone-question rewriting require evaluation against representative conversations before accepting their additional latency, cost, and failure modes. Concatenation keeps the behavior small and deterministic.
 
-### Design Patterns - Decided
+### Design Patterns
 
 The implementation uses patterns only where they clarify a real boundary:
 
@@ -510,7 +505,7 @@ The implementation uses patterns only where they clarify a real boundary:
 - **Gateway/Adapter:** embedding and generation gateways translate the provider's OpenAI-compatible protocol into small application interfaces. Provider configuration and errors do not leak into chat or ingestion services.
 - **Dependency Injection:** `bootstrap()` explicitly constructs and passes repositories, gateways, storage, clocks, and identifier functions. This makes dependencies visible and replaceable in unit tests without introducing a runtime container.
 
-These patterns isolate behavior that genuinely varies: persistence, document format, and model provider. A dependency-injection container and generic base-repository hierarchy are intentionally excluded because they would add indirection without reducing assignment complexity.
+These patterns isolate behavior that genuinely varies: persistence, document format, and model provider. A dependency-injection container and generic base-repository hierarchy would add indirection without reducing the service's complexity.
 
 ## Validation and Error Handling
 
@@ -544,7 +539,7 @@ test/e2e/                        end-to-end specifications
 test/fake-ai/                    deterministic OpenAI-compatible fake
 ```
 
-The mirrored path makes ownership obvious and allows a reviewer to move directly between a module and its unit specification. End-to-end files use the suffix `.e2e.spec.ts` so Vitest projects can select them independently.
+The mirrored path makes ownership obvious and allows direct navigation between a module and its unit specification. End-to-end files use the suffix `.e2e.spec.ts` so Vitest projects can select them independently.
 
 ### Unit-Test Contract
 
@@ -571,7 +566,7 @@ Pragmatism takes precedence over mock purity:
 
 End-to-end tests start the same API, worker, PostgreSQL/pgvector, migrations, and shared upload volume used by the local Docker Compose setup. Tests communicate through public HTTP endpoints and observe asynchronous work by polling `GET /jobs/{id}` with a bounded timeout.
 
-The test profile uses a deterministic OpenAI-compatible fake service for embeddings and generation. This avoids cost, credentials, rate limits, and nondeterministic model text while retaining the real provider adapter and network boundary. Live OpenAI calls are not required for test or reviewer verification.
+The test profile uses a deterministic OpenAI-compatible fake service for embeddings and generation. This avoids cost, credentials, rate limits, and nondeterministic model text while retaining the real provider adapter and network boundary. Live OpenAI calls are not required for automated verification.
 
 The main end-to-end scenarios are:
 
@@ -593,7 +588,7 @@ The grounded fixture cases are declared together in `test/e2e/core.e2e.spec.ts`,
 | `test/files/docx-test.docx` | Where should figure captions and descriptions be placed in the CMS user manual template? | Left-aligned; below the figure; alternative text; DOCX source |
 | `test/files/asya-genc-cv.json` | At which company and during what period did Asya Genç work as a Software Engineering Intern? | SabancıDx; Summer 2025; `$.experience[0]` |
 
-The CSV remains a small in-memory ingestion smoke fixture because no CSV file is currently present under `test/files/`. Error-path inputs remain synthetic so their malformed or provider-failure behavior is obvious and intentional.
+The CSV is a small in-memory ingestion smoke fixture because no CSV file is present under `test/files/`. Error-path inputs are synthetic so their malformed or provider-failure behavior is obvious and intentional.
 
 ### Test Commands
 
@@ -653,13 +648,13 @@ worker    same application image, worker entry point, shared upload volume
 postgres  version-pinned pgvector PostgreSQL image, database volume
 ```
 
-Compose starts the API, worker, and PostgreSQL automatically. It includes a PostgreSQL health check, separate persistent database and upload volumes, migration ordering, graceful shutdown, and restart-safe lease recovery. Image versions are pinned rather than relying on `latest`. A local model server is optional rather than part of the default stack, avoiding a large model download for reviewers who supply an OpenAI API key.
+Compose starts the API, worker, and PostgreSQL automatically. It includes a PostgreSQL health check, separate persistent database and upload volumes, migration ordering, graceful shutdown, and restart-safe lease recovery. Image versions are pinned rather than relying on `latest`. A local model server is optional rather than part of the default stack, avoiding a large model download when using an OpenAI API key.
 
-The end-to-end command activates an isolated Compose test profile that adds the deterministic AI fake and test runner, waits on service health checks, returns the test runner's exit code, and removes its isolated volumes afterward. Reviewers do not need to start or clean up individual services manually.
+The end-to-end command activates an isolated Compose test profile that adds the deterministic AI fake and test runner, waits on service health checks, returns the test runner's exit code, and removes its isolated volumes afterward. Individual services do not require manual setup or cleanup.
 
 `.env.example` documents the database URL, upload path, PDF OCR controls, independent embedding and generation base URLs/API keys/model names, embedding dimensions, server port, log level, retrieval limit, and worker polling/retry settings. Hosted OpenAI is the default. To use local compatible servers, set the two base URLs and model names independently and provide any non-empty key value required by those servers.
 
-## What Would Change in Production
+## Production Considerations
 
 ### Scalability
 
@@ -699,11 +694,11 @@ The end-to-end command activates an isolated Compose test profile that adds the 
 - Use lifecycle policies for original files and superseded document versions.
 - Measure vector-index memory/storage overhead before choosing HNSW parameters or a dedicated vector service.
 
-## Final Implementation Defaults
+## Runtime Defaults
 
-The implementation follows the finalized architecture decisions. Operational numbers remain configurable and may be adjusted when representative data provides evidence.
+Operational values are configurable and should be adjusted using representative workload data.
 
-| Area | Final starting point |
+| Area | Default |
 | --- | --- |
 | Runtime | Node.js 24 LTS, npm, ES modules, strict TypeScript, esbuild bundles with TypeScript source maps |
 | Database startup | A one-shot Compose migration service runs Drizzle migrations before API and worker services become ready |
@@ -714,11 +709,10 @@ The implementation follows the finalized architecture decisions. Operational num
 | Coverage | V8 coverage as a diagnostic; meaningful critical-path coverage without a blanket 100% target |
 | Structure | Explicit `api`, `application`, `domain`, `infrastructure`, `parsers`, `worker`, and `config` modules; no dependency-injection framework |
 
-These are defaults, not promises that tuning values will never change. Changes that alter API behavior, persistence compatibility, or component ownership should be recorded here as new architectural decisions.
+Changes that alter API behavior, persistence compatibility, or component ownership should be recorded alongside the relevant architecture rationale.
 
 ## References
 
-- [Assignment specification](assignment.pdf)
 - [PostgreSQL documentation](https://www.postgresql.org/docs/)
 - [pgvector](https://github.com/pgvector/pgvector)
 - [Drizzle pgvector support](https://orm.drizzle.team/docs/extensions)
