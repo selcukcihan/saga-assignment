@@ -1,5 +1,5 @@
-import type { ChatRepository, EmbeddingGateway, GenerationGateway, GenerationMessage } from "./ports.js";
-import { NotFoundError } from "../domain/errors.js";
+import type { ChatRepository, EmbeddingGateway, GenerationGateway, GenerationMessage } from "./ports";
+import { NotFoundError } from "../domain/errors";
 
 const NO_CONTEXT_ANSWER = "I could not find relevant information in the ingested documents.";
 

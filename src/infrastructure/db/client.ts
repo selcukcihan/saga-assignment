@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import type { DatabaseConfig } from "../../config/env.js";
-import * as schema from "./schema.js";
+import type { DatabaseConfig } from "../../config/env";
+import * as schema from "./schema";
 
 export type Database = ReturnType<typeof createDatabase>["db"];
 

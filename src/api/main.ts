@@ -1,5 +1,5 @@
-import { createApp } from "./create-app.js";
-import { bootstrap } from "../bootstrap.js";
+import { createApp } from "./create-app";
+import { bootstrap } from "../bootstrap";
 
 const dependencies = bootstrap();
 const app = createApp({

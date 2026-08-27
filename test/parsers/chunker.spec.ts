@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FormatAwareChunker } from "../../src/parsers/chunker.js";
+import { FormatAwareChunker } from "../../src/parsers/chunker";
 
 describe("FormatAwareChunker", () => {
   it("uses deterministic identities and retains PDF page locations", () => {

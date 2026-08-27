@@ -1,16 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { ChatService } from "./application/chat-service.js";
-import { IngestionService } from "./application/ingestion-service.js";
-import { loadConfig } from "./config/env.js";
-import { OpenAICompatibleEmbeddingGateway, OpenAICompatibleGenerationGateway } from "./infrastructure/ai/openai-compatible-gateways.js";
-import { createDatabase } from "./infrastructure/db/client.js";
-import { NodeFileStore } from "./infrastructure/files/node-file-store.js";
-import { createLogger } from "./infrastructure/logging/logger.js";
-import { PostgresChatRepository } from "./infrastructure/repositories/postgres-chat-repository.js";
-import { PostgresIngestionRepository } from "./infrastructure/repositories/postgres-ingestion-repository.js";
-import { PostgresJobRepository } from "./infrastructure/repositories/postgres-job-repository.js";
-import { FormatAwareChunker } from "./parsers/chunker.js";
-import { DefaultParserRegistry } from "./parsers/registry.js";
+import { ChatService } from "./application/chat-service";
+import { IngestionService } from "./application/ingestion-service";
+import { loadConfig } from "./config/env";
+import { OpenAICompatibleEmbeddingGateway, OpenAICompatibleGenerationGateway } from "./infrastructure/ai/openai-compatible-gateways";
+import { createDatabase } from "./infrastructure/db/client";
+import { NodeFileStore } from "./infrastructure/files/node-file-store";
+import { createLogger } from "./infrastructure/logging/logger";
+import { PostgresChatRepository } from "./infrastructure/repositories/postgres-chat-repository";
+import { PostgresIngestionRepository } from "./infrastructure/repositories/postgres-ingestion-repository";
+import { PostgresJobRepository } from "./infrastructure/repositories/postgres-job-repository";
+import { FormatAwareChunker } from "./parsers/chunker";
+import { DefaultParserRegistry } from "./parsers/registry";
 
 export function bootstrap() {
   const config = loadConfig();

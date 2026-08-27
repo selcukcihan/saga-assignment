@@ -1,11 +1,11 @@
-import type { DocumentParser, ParserRegistry } from "../application/ports.js";
-import type { SupportedMediaType } from "../domain/documents.js";
-import { CsvParser } from "./csv-parser.js";
-import { DocxParser } from "./docx-parser.js";
-import { JsonParser } from "./json-parser.js";
-import { PdfParser } from "./pdf-parser.js";
-import { PdfJsTextExtractor } from "./pdfjs-text-extractor.js";
-import { TesseractPdfOcr } from "./tesseract-pdf-ocr.js";
+import type { DocumentParser, ParserRegistry } from "../application/ports";
+import type { SupportedMediaType } from "../domain/documents";
+import { CsvParser } from "./csv-parser";
+import { DocxParser } from "./docx-parser";
+import { JsonParser } from "./json-parser";
+import { PdfParser } from "./pdf-parser";
+import { PdfJsTextExtractor } from "./pdfjs-text-extractor";
+import { TesseractPdfOcr } from "./tesseract-pdf-ocr";
 
 export interface PdfExtractionConfig {
   ocrEnabled: boolean;

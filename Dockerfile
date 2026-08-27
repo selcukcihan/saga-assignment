@@ -4,7 +4,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 FROM dependencies AS build
-COPY tsconfig.json tsconfig.build.json ./
+COPY tsconfig.json ./
+COPY scripts/build.mjs ./scripts/build.mjs
 COPY src ./src
 RUN npm run build
 
@@ -19,7 +20,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 FROM node:24.13.1-bookworm-slim AS runtime
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+    NODE_OPTIONS=--enable-source-maps
 WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-eng \

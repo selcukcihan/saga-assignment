@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { ChatService } from "../../src/application/chat-service.js";
-import type { ChatRepository, EmbeddingGateway, GenerationGateway } from "../../src/application/ports.js";
+import { ChatService } from "../../src/application/chat-service";
+import type { ChatRepository, EmbeddingGateway, GenerationGateway } from "../../src/application/ports";
 
 function setup() {
   const source = {

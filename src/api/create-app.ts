@@ -5,13 +5,13 @@ import express from "express";
 import multer from "multer";
 import { pinoHttp } from "pino-http";
 import { z } from "zod";
-import type { ChatService } from "../application/chat-service.js";
-import type { IngestionService } from "../application/ingestion-service.js";
-import type { FileStore, JobRepository } from "../application/ports.js";
-import { AppError, NotFoundError } from "../domain/errors.js";
-import type { SupportedMediaType } from "../domain/documents.js";
-import type { Logger } from "../infrastructure/logging/logger.js";
-import { errorHandler, notFoundHandler } from "./error-handler.js";
+import type { ChatService } from "../application/chat-service";
+import type { IngestionService } from "../application/ingestion-service";
+import type { FileStore, JobRepository } from "../application/ports";
+import { AppError, NotFoundError } from "../domain/errors";
+import type { SupportedMediaType } from "../domain/documents";
+import type { Logger } from "../infrastructure/logging/logger";
+import { errorHandler, notFoundHandler } from "./error-handler";
 
 const uuidParameter = z.string().uuid();
 const chatBody = z.object({

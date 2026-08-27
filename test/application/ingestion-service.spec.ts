@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { IngestionService } from "../../src/application/ingestion-service.js";
-import type { EmbeddingGateway, FileStore, IngestionRepository } from "../../src/application/ports.js";
+import { IngestionService } from "../../src/application/ingestion-service";
+import type { EmbeddingGateway, FileStore, IngestionRepository } from "../../src/application/ports";
 
 function dependencies() {
   const repository = { create: vi.fn(), removeCreated: vi.fn() } satisfies IngestionRepository;

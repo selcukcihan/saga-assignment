@@ -14,7 +14,7 @@ import {
   uuid,
   vector,
 } from "drizzle-orm/pg-core";
-import type { SourceLocator } from "../../domain/documents.js";
+import type { SourceLocator } from "../../domain/documents";
 
 export const documentStatus = pgEnum("document_status", ["pending", "processing", "ready", "failed"]);
 export const jobStatus = pgEnum("job_status", ["queued", "processing", "completed", "failed"]);

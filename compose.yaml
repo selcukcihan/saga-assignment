@@ -29,7 +29,7 @@ services:
     build:
       context: .
       target: runtime
-    command: ["node", "dist/infrastructure/db/migrate.js"]
+    command: ["node", "--enable-source-maps", "dist/infrastructure/db/migrate.js"]
     environment:
       DATABASE_URL: postgres://saga:saga@postgres:5432/saga
     depends_on:
@@ -40,7 +40,7 @@ services:
     build:
       context: .
       target: runtime
-    command: ["node", "dist/api/main.js"]
+    command: ["node", "--enable-source-maps", "dist/api/main.js"]
     environment: *app-environment
     ports:
       - "${PORT:-3000}:3000"
@@ -66,7 +66,7 @@ services:
     build:
       context: .
       target: runtime
-    command: ["node", "dist/worker/main.js"]
+    command: ["node", "--enable-source-maps", "dist/worker/main.js"]
     environment: *app-environment
     volumes:
       - uploads:/data/uploads

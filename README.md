@@ -324,7 +324,13 @@ The migration creates explicit document/job/message status enums, foreign keys, 
 
 The service is written in TypeScript on Node.js. This matches the assignment preference and provides static checking across API contracts, application services, database schemas, and provider integrations.
 
-The implementation pins Node.js 24 LTS, uses npm and ES modules, and enables TypeScript strict mode. Exact dependency versions are locked in the Docker image and lockfile.
+The implementation pins Node.js 24 LTS, uses npm and ES modules, and enables TypeScript strict mode. TypeScript uses `Bundler` module resolution, allowing extensionless relative imports while preserving standard extensionless package imports.
+
+`npm run build` first runs `tsc --noEmit` so esbuild's transpilation does not replace static type checking. It then creates separate unminified ESM bundles for the API, worker, and migration entry points. Third-party packages remain external, preserving normal Node.js package loading and keeping native or runtime-loaded dependencies out of the bundle.
+
+The bundles include external source maps with embedded TypeScript source content and preserved function/class names. Production commands enable Node's source-map support, so application stack frames refer to the original `.ts` file and line rather than the generated bundle. Source maps are copied into the runtime image but are not exposed through the HTTP API. Production artifact access and server-side stack-trace logging must remain restricted because embedded source content is sensitive implementation data.
+
+Compared with executing `tsc` output directly, esbuild adds a build dependency and makes the emitted bundle less readable without its source map. The accepted benefit is extensionless source imports, smaller runtime artifacts, fast builds, and accurate TypeScript stack traces. Exact dependency versions are locked in the Docker image and lockfile.
 
 ### Express - Decided
 
@@ -539,6 +545,7 @@ The package scripts are:
 npm test                  # unit tests once; no Docker required
 npm run test:watch        # unit tests in watch mode
 npm run test:coverage     # unit tests with V8 coverage
+npm run build             # typecheck and create source-mapped esbuild bundles
 npm run test:e2e          # build and run the isolated Compose test profile
 npm run test:all          # unit tests followed by end-to-end tests
 ```
@@ -640,7 +647,7 @@ The implementation follows the finalized architecture decisions. Operational num
 
 | Area | Final starting point |
 | --- | --- |
-| Runtime | Node.js 24 LTS, npm, ES modules, strict TypeScript |
+| Runtime | Node.js 24 LTS, npm, ES modules, strict TypeScript, esbuild bundles with TypeScript source maps |
 | Database startup | A one-shot Compose migration service runs Drizzle migrations before API and worker services become ready |
 | Connection pools | Separate API and worker pools; conservative limits and timeouts controlled through environment variables |
 | Validation | Zod for environment and HTTP boundaries; centralized safe error envelope |
@@ -659,6 +666,7 @@ These are defaults, not promises that tuning values will never change. Changes t
 - [Drizzle pgvector support](https://orm.drizzle.team/docs/extensions)
 - [node-postgres](https://node-postgres.com/)
 - [Express 5 documentation](https://expressjs.com/en/5x/api.html)
+- [esbuild](https://esbuild.github.io/)
 - [OpenAI Chat Completions API](https://developers.openai.com/api/reference/cli/resources/chat/subresources/completions)
 - [OpenAI embeddings](https://developers.openai.com/api/reference/typescript/resources/embeddings/methods/create)
 - [OpenAI `text-embedding-3-small`](https://developers.openai.com/api/docs/models/text-embedding-3-small)

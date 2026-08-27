@@ -1,5 +1,5 @@
-import type { EmbeddingGateway, FileStore, IngestionRepository } from "./ports.js";
-import type { SupportedMediaType } from "../domain/documents.js";
+import type { EmbeddingGateway, FileStore, IngestionRepository } from "./ports";
+import type { SupportedMediaType } from "../domain/documents";
 
 export interface IngestCommand {
   filename: string;

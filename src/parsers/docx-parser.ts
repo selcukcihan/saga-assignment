@@ -1,6 +1,6 @@
 import mammoth from "mammoth";
-import type { DocumentParser } from "../application/ports.js";
-import { PermanentIngestionError } from "../domain/errors.js";
+import type { DocumentParser } from "../application/ports";
+import { PermanentIngestionError } from "../domain/errors";
 
 function decodeHtml(value: string): string {
   const named: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };

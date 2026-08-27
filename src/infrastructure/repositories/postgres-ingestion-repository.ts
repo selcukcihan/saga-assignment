@@ -1,7 +1,7 @@
-import type { Database } from "../db/client.js";
+import type { Database } from "../db/client";
 import { eq } from "drizzle-orm";
-import { documents, documentVersions, ingestionJobs } from "../db/schema.js";
-import type { IngestionRepository } from "../../application/ports.js";
+import { documents, documentVersions, ingestionJobs } from "../db/schema";
+import type { IngestionRepository } from "../../application/ports";
 
 export class PostgresIngestionRepository implements IngestionRepository {
   constructor(private readonly database: Database) {}

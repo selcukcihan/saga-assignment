@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadConfig } from "../../src/config/env.js";
+import { loadConfig } from "../../src/config/env";
 
 const required = {
   EMBEDDING_API_KEY: "test",

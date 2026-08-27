@@ -1,5 +1,5 @@
-import type { Citation, DocumentChunk, SourceBlock, SupportedMediaType } from "../domain/documents.js";
-import type { ClaimedJob, JobStatus } from "../domain/jobs.js";
+import type { Citation, DocumentChunk, SourceBlock, SupportedMediaType } from "../domain/documents";
+import type { ClaimedJob, JobStatus } from "../domain/jobs";
 
 export interface EmbeddingGateway {
   readonly provider: string;

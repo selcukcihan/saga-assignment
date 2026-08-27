@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import { WorkerService } from "../application/worker-service.js";
-import { bootstrap } from "../bootstrap.js";
+import { WorkerService } from "../application/worker-service";
+import { bootstrap } from "../bootstrap";
 
 const dependencies = bootstrap();
 const workerId = `worker-${randomUUID()}`;

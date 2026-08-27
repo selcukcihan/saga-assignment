@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import type { Chunker } from "../application/ports.js";
-import type { DocumentChunk, SourceBlock, SourceLocator } from "../domain/documents.js";
+import type { Chunker } from "../application/ports";
+import type { DocumentChunk, SourceBlock, SourceLocator } from "../domain/documents";
 
 function deterministicUuid(value: string): string {
   const bytes = createHash("sha256").update(value).digest().subarray(0, 16);

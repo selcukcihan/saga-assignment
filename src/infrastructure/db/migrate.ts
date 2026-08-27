@@ -1,6 +1,6 @@
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { loadDatabaseConfig } from "../../config/env.js";
-import { createDatabase } from "./client.js";
+import { loadDatabaseConfig } from "../../config/env";
+import { createDatabase } from "./client";
 
 const database = createDatabase(loadDatabaseConfig());
 

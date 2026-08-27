@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { WorkerService } from "../../src/application/worker-service.js";
-import type { Chunker, EmbeddingGateway, JobRepository, ParserRegistry } from "../../src/application/ports.js";
-import { ProviderError } from "../../src/domain/errors.js";
+import { WorkerService } from "../../src/application/worker-service";
+import type { Chunker, EmbeddingGateway, JobRepository, ParserRegistry } from "../../src/application/ports";
+import { ProviderError } from "../../src/domain/errors";
 
 const job = {
   id: "job",

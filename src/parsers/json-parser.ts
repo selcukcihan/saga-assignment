@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
-import type { DocumentParser } from "../application/ports.js";
-import type { SourceBlock } from "../domain/documents.js";
-import { PermanentIngestionError } from "../domain/errors.js";
+import type { DocumentParser } from "../application/ports";
+import type { SourceBlock } from "../domain/documents";
+import { PermanentIngestionError } from "../domain/errors";
 
 function childPath(path: string, key: string | number): string {
   return typeof key === "number" ? `${path}[${key}]` : `${path}.${key}`;

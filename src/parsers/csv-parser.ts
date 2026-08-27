@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { parse } from "csv-parse/sync";
-import type { DocumentParser } from "../application/ports.js";
-import { PermanentIngestionError } from "../domain/errors.js";
+import type { DocumentParser } from "../application/ports";
+import { PermanentIngestionError } from "../domain/errors";
 
 export class CsvParser implements DocumentParser {
   async parse(path: string) {

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
-import { JsonParser } from "../../src/parsers/json-parser.js";
+import { JsonParser } from "../../src/parsers/json-parser";
 
 vi.mock("node:fs/promises", () => ({ readFile: vi.fn() }));
 const readFileMock = vi.mocked(readFile);

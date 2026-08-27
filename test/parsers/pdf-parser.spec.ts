@@ -3,7 +3,7 @@ import {
   PdfParser,
   type NativePdfTextExtractor,
   type PdfPageOcr,
-} from "../../src/parsers/pdf-parser.js";
+} from "../../src/parsers/pdf-parser";
 
 function setup(pages: Awaited<ReturnType<NativePdfTextExtractor["extract"]>>) {
   const nativeText = { extract: vi.fn().mockResolvedValue(pages) } satisfies NativePdfTextExtractor;

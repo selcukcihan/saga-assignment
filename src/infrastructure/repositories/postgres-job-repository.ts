@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
-import type { JobRepository, JobView } from "../../application/ports.js";
-import type { ClaimedJob } from "../../domain/jobs.js";
+import type { JobRepository, JobView } from "../../application/ports";
+import type { ClaimedJob } from "../../domain/jobs";
 
 interface JobViewRow {
   id: string;

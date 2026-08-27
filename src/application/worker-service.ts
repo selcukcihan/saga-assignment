@@ -1,6 +1,6 @@
-import type { Chunker, EmbeddingGateway, JobRepository, ParserRegistry } from "./ports.js";
-import { isSupportedMediaType } from "../domain/documents.js";
-import { PermanentIngestionError, ProviderError, safeIngestionError } from "../domain/errors.js";
+import type { Chunker, EmbeddingGateway, JobRepository, ParserRegistry } from "./ports";
+import { isSupportedMediaType } from "../domain/documents";
+import { PermanentIngestionError, ProviderError, safeIngestionError } from "../domain/errors";
 
 export class WorkerService {
   constructor(

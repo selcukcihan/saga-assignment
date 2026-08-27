@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
-import type { TextItem } from "pdfjs-dist/types/src/display/api.js";
-import type { NativePdfPage, NativePdfTextExtractor } from "./pdf-parser.js";
+import type { TextItem } from "pdfjs-dist/types/src/display/api";
+import type { NativePdfPage, NativePdfTextExtractor } from "./pdf-parser";
 
 export class PdfJsTextExtractor implements NativePdfTextExtractor {
   async extract(path: string): Promise<NativePdfPage[]> {

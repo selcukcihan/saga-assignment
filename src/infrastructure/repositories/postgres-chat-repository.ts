@@ -5,8 +5,8 @@ import type {
   RetrievedChunk,
   SessionSummary,
   SessionView,
-} from "../../application/ports.js";
-import type { Citation, SourceLocator } from "../../domain/documents.js";
+} from "../../application/ports";
+import type { Citation, SourceLocator } from "../../domain/documents";
 
 interface MessageRow {
   id: string;

@@ -1,6 +1,6 @@
 import OpenAI from "openai";
-import type { EmbeddingGateway, GenerationGateway } from "../../application/ports.js";
-import { ProviderError } from "../../domain/errors.js";
+import type { EmbeddingGateway, GenerationGateway } from "../../application/ports";
+import { ProviderError } from "../../domain/errors";
 
 function providerError(error: unknown): ProviderError {
   if (error instanceof OpenAI.APIError) {

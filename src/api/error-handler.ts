@@ -1,8 +1,8 @@
 import type { ErrorRequestHandler, RequestHandler } from "express";
 import multer from "multer";
 import { ZodError } from "zod";
-import { AppError, ProviderError } from "../domain/errors.js";
-import type { Logger } from "../infrastructure/logging/logger.js";
+import { AppError, ProviderError } from "../domain/errors";
+import type { Logger } from "../infrastructure/logging/logger";
 
 export function notFoundHandler(): RequestHandler {
   return (_request, _response, next) => next(new AppError("NOT_FOUND", "Route was not found", 404));

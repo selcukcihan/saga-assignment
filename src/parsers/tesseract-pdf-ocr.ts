@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { PdfPageOcr } from "./pdf-parser.js";
+import type { PdfPageOcr } from "./pdf-parser";
 
 const executeFile = promisify(execFile);
 

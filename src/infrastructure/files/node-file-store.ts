@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
-import type { FileStore } from "../../application/ports.js";
+import type { FileStore } from "../../application/ports";
 
 export class NodeFileStore implements FileStore {
   async hash(path: string): Promise<string> {
