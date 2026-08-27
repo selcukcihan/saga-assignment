@@ -1,4 +1,4 @@
-import type { ChatRepository, EmbeddingGateway, GenerationGateway } from "./ports.js";
+import type { ChatRepository, EmbeddingGateway, GenerationGateway, GenerationMessage } from "./ports.js";
 import { NotFoundError } from "../domain/errors.js";
 
 const NO_CONTEXT_ANSWER = "I could not find relevant information in the ingested documents.";
@@ -22,7 +22,8 @@ export class ChatService {
     }
 
     const history = await this.repository.recentMessages(sessionId, this.historyLimit);
-    const [queryEmbedding] = await this.embeddings.embed([input.question]);
+    const retrievalQuery = buildRetrievalQuery(input.question, history);
+    const [queryEmbedding] = await this.embeddings.embed([retrievalQuery]);
     if (!queryEmbedding) throw new Error("Embedding provider returned no query embedding");
     const sources = await this.repository.search(queryEmbedding, this.retrievalLimit);
     const answer = sources.length
@@ -58,6 +59,19 @@ export class ChatService {
   async listSessions() {
     return this.repository.listSessions();
   }
+}
+
+function buildRetrievalQuery(question: string, history: readonly GenerationMessage[]) {
+  const recentExchange = history.slice(-2);
+  if (recentExchange.length === 0) return question;
+
+  const conversationContext = recentExchange
+    .map(
+      (message) =>
+        `${message.role === "user" ? "Previous user message" : "Previous assistant response"}: ${message.content}`,
+    )
+    .join("\n");
+  return `${conversationContext}\nCurrent user question: ${question}`;
 }
 
 function formatLocator(locator: { page?: number; row_start?: number; json_path?: string; paragraph_start?: number }) {

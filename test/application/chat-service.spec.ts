@@ -36,12 +36,41 @@ describe("ChatService", () => {
 
     expect(result).toEqual({ sessionId: "session-id", answer: "Saga uses AI [1]", sources: [deps.source] });
     expect(deps.repository.createSession).toHaveBeenCalledWith("session-id");
+    expect(deps.embeddings.embed).toHaveBeenCalledWith(["What does Saga use?"]);
     expect(deps.repository.search).toHaveBeenCalledWith([1, 0], 5);
     expect(deps.generation.generate).toHaveBeenCalledWith(expect.objectContaining({
       question: "What does Saga use?",
       context: [expect.objectContaining({ rank: 1, content: "Saga uses AI" })],
     }));
     expect(deps.repository.saveExchange).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "session-id" }));
+  });
+
+  it("uses only the most recent exchange to contextualize follow-up retrieval", async () => {
+    const deps = setup();
+    deps.repository.recentMessages.mockResolvedValue([
+      { role: "user", content: "An older unrelated question" },
+      { role: "assistant", content: "An older unrelated answer" },
+      { role: "user", content: "Where did Asya work as an intern?" },
+      { role: "assistant", content: "At SabancıDx during Summer 2025." },
+    ]);
+    const service = new ChatService(deps.repository, deps.embeddings, deps.generation, deps.newId, 5, 10);
+
+    await service.chat({ question: "What did she do there?", sessionId: "session-id" });
+
+    expect(deps.embeddings.embed).toHaveBeenCalledWith([
+      "Previous user message: Where did Asya work as an intern?\n" +
+      "Previous assistant response: At SabancıDx during Summer 2025.\n" +
+      "Current user question: What did she do there?",
+    ]);
+    expect(deps.generation.generate).toHaveBeenCalledWith(expect.objectContaining({
+      question: "What did she do there?",
+      history: [
+        { role: "user", content: "An older unrelated question" },
+        { role: "assistant", content: "An older unrelated answer" },
+        { role: "user", content: "Where did Asya work as an intern?" },
+        { role: "assistant", content: "At SabancıDx during Summer 2025." },
+      ],
+    }));
   });
 
   it("does not call generation when retrieval returns no context", async () => {

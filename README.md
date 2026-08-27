@@ -1,14 +1,14 @@
 # Multi-Source Knowledge API
 
-> Implemented core assignment, architecture record, and reviewer guide.
+> Implemented core assignment, one focused Tier 2 feature, architecture record, and reviewer guide.
 
 This repository contains a conversational retrieval-augmented generation (RAG) API for ingesting PDF, DOCX, CSV, and JSON documents and answering questions with source citations and conversation context.
 
-The core implementation is complete. `docker compose up --build` starts PostgreSQL/pgvector, runs the Drizzle migration once, and then starts independent API and worker processes with shared upload storage. Tier 2 and Tier 3 remain deliberately out of scope.
+The core implementation and Tier 2 follow-up context are complete. `docker compose up --build` starts PostgreSQL/pgvector, runs the Drizzle migration once, and then starts independent API and worker processes with shared upload storage. The remaining optional Tier 2 features and all Tier 3 features remain deliberately out of scope.
 
 ## Scope
 
-The implementation focuses exclusively on the assignment's core requirements:
+The implementation focuses on the assignment's core requirements plus one deliberately selected Tier 2 feature:
 
 - Ingest PDF, DOCX, CSV, and JSON documents.
 - Process ingestion asynchronously and expose job status.
@@ -17,10 +17,11 @@ The implementation focuses exclusively on the assignment's core requirements:
 - Perform vector-based semantic retrieval.
 - Answer questions using retrieved context and return source citations.
 - Track conversations by `session_id`.
+- Use the most recent exchange to retrieve evidence for ambiguous follow-up questions.
 - Persist user queries, generated answers, and their sources.
 - Provide validation, error handling, tests, Docker setup, API documentation, and architectural documentation.
 
-Tier 2 and Tier 3 features are deliberately out of scope. In particular, the first version will not include hybrid BM25 search, query rewriting, smart routing, SSE streaming, re-ranking, Redis caching, or a formal retrieval evaluation suite.
+Other Tier 2 and Tier 3 features are deliberately out of scope. In particular, the first version will not include hybrid BM25 search, LLM query rewriting, smart routing, SSE streaming, re-ranking, Redis caching, or a formal retrieval evaluation suite.
 
 ## Requirements Traceability
 
@@ -31,6 +32,7 @@ Tier 2 and Tier 3 features are deliberately out of scope. In particular, the fir
 | Chunk storage with embeddings | PostgreSQL `chunks` table with a pgvector column | Implemented with Drizzle migration |
 | Session management | `POST /chat` creates a session when `session_id` is omitted | Implemented and E2E tested |
 | Chat history including sources | Chat messages and citation records | Implemented and E2E tested |
+| Tier 2 follow-up context | Retrieval query includes the most recent user/assistant exchange | Implemented and E2E tested |
 | `POST /ingest` | HTTP API | Implemented |
 | `POST /chat` | HTTP API | Implemented |
 | `GET /sessions` | HTTP API | Implemented and E2E tested |
@@ -66,7 +68,8 @@ flowchart LR
     Worker -->|"chunks + vectors + status"| DB
 
     Client -->|"POST /chat"| API
-    API -->|"embed retrieval query"| Embeddings
+    DB -->|"most recent exchange"| API
+    API -->|"embed contextual retrieval query"| Embeddings
     API -->|"cosine similarity search"| DB
     API -->|"question + retrieved context"| LLM
     API -->|"messages + citations"| DB
@@ -114,13 +117,14 @@ The worker runs as a separate Docker Compose service using the same application 
 
 1. The client submits a question and an optional `session_id` to `POST /chat`.
 2. The chat service creates a session when `session_id` is omitted, or loads the existing session when it is supplied.
-3. The retrieval query is embedded using the same embedding model and version used for document chunks.
-4. The retrieval repository searches the shared corpus of all `ready` document versions and returns the five nearest chunks by default.
-5. The generation model receives the question, selected conversation context, and retrieved chunks.
-6. The service produces an answer whose citations refer only to retrieved chunks.
-7. The user message, assistant answer, and source references are persisted before the response is returned.
+3. For a continuing session, the service deterministically combines the most recent user/assistant exchange with the current question. A first-turn question remains unchanged.
+4. The resulting retrieval query is embedded using the same embedding model and version used for document chunks.
+5. The retrieval repository searches the shared corpus of all `ready` document versions and returns the five nearest chunks by default.
+6. The generation model receives the original question, the configured conversation-history window, and the retrieved chunks.
+7. The service produces an answer whose citations refer only to retrieved chunks.
+8. The user message, assistant answer, and source references are persisted before the response is returned.
 
-The first version will perform a single vector retrieval step. Follow-up rewriting, hybrid search, re-ranking, and streaming are excluded because they belong to the optional tiers.
+The service still performs a single vector retrieval step. LLM-based rewriting, hybrid search, re-ranking, and streaming remain excluded.
 
 ### Conversation History
 
@@ -128,7 +132,7 @@ The first version will perform a single vector retrieval step. Follow-up rewriti
 
 ## API Surface
 
-The API intentionally contains only the endpoints needed by the core assignment.
+The API intentionally contains only the endpoints needed by the assignment workflow and external reviewer inspection.
 
 | Method and path | Purpose | Expected success status | Decision state |
 | --- | --- | --- | --- |
@@ -424,6 +428,14 @@ The assignment version has one shared knowledge corpus. Every chat searches all 
 
 There is no session-creation endpoint. `POST /chat` accepts an optional `session_id`: omitting it creates and returns a new session, while supplying it continues an existing session. `GET /sessions` is a small reviewer convenience endpoint rather than a separate session lifecycle API. This leaves the API at five endpoints including the required job-status endpoint.
 
+### Deterministic Follow-up Context - Decided
+
+The selected Tier 2 feature is history-aware retrieval for follow-up questions such as “What did she do there?”. For a continuing session, the retrieval text contains the latest persisted user message, the latest assistant response, and the current user question with explicit labels. Only this most recent exchange is used for retrieval, while the generation model still receives the configured conversation-history window. First-turn retrieval remains identical to the core implementation.
+
+This approach adds no extra model request, remains provider-neutral, and is deterministic enough to verify at the unit and end-to-end boundaries. Limiting retrieval context to one exchange also reduces topic pollution and embedding input growth compared with embedding the full conversation.
+
+The trade-off is that deterministic concatenation does not actually resolve pronouns and may carry an inaccurate earlier answer into retrieval. It can also bias a genuine topic change toward the previous subject. A production version should evaluate follow-up detection and LLM-based standalone-question rewriting against representative conversations before accepting their additional latency, cost, and failure mode. The assignment version favors the smallest implementation that materially improves conversational retrieval.
+
 ### Design Patterns - Decided
 
 The implementation uses patterns only where they clarify a real boundary:
@@ -501,8 +513,8 @@ The main end-to-end scenarios are:
 
 1. Upload the repository's representative PDF, DOCX, and JSON files plus a minimal CSV; observe `202`, a queued/running job, and eventual completion.
 2. Ask one deterministic grounded question per repository file; verify explicit answer facts and the expected filename/locator are returned.
-3. Ask a grounded question after ingestion; verify that the response contains an answer, valid chunk-backed citations, and a returned `session_id`.
-4. Continue the session with that identifier and retrieve the persisted ordered history with sources.
+3. Start a grounded JSON conversation, then ask the ambiguous follow-up “What did she do there?”; verify retrieval still returns the relevant JSON source.
+4. Retrieve the continued session and verify its persisted ordered history and sources.
 5. List session summaries; verify the most recently active session and its message count.
 6. Reject an unsupported or malformed upload with the documented error envelope.
 7. Simulate a provider/parser failure and verify retry/final failed-job behavior without exposing internal error details.

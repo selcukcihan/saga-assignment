@@ -129,11 +129,11 @@ describe.sequential("core API", () => {
     ]));
   });
 
-  it("answers with chunk-backed sources and persists a continuing session", async () => {
+  it("uses the most recent exchange to retrieve context for an ambiguous follow-up", async () => {
     const firstResponse = await fetch(`${api}/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ question: knowledgeFixtures[0]!.question }),
+      body: JSON.stringify({ question: knowledgeFixtures[2]!.question }),
     });
     expect(firstResponse.status).toBe(200);
     const first = await firstResponse.json() as { session_id: string; answer: string; sources: Array<{ chunk_id: string; locator: unknown }> };
@@ -146,10 +146,19 @@ describe.sequential("core API", () => {
     const followUp = await fetch(`${api}/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ question: "Which professional AWS certification does Selçuk hold?", session_id: sessionId }),
+      body: JSON.stringify({ question: "What did she do there?", session_id: sessionId }),
     });
     expect(followUp.status).toBe(200);
-    await followUp.body?.cancel();
+    const followUpResult = await followUp.json() as {
+      answer: string;
+      sources: Array<{ filename: string; locator: { format: string; json_path?: string } }>;
+    };
+    expect(followUpResult.sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        filename: knowledgeFixtures[2]!.filename,
+        locator: expect.objectContaining(knowledgeFixtures[2]!.expectedLocator),
+      }),
+    ]));
 
     const historyResponse = await fetch(`${api}/sessions/${sessionId}`);
     expect(historyResponse.status).toBe(200);

@@ -1,6 +1,12 @@
 import { createServer } from "node:http";
 
 const dimensions = 1536;
+const deterministicAnswers = new Map([
+  [
+    "At which company and during what period did Asya Genç work as a Software Engineering Intern?",
+    "She worked at SabancıDx during Summer 2025 [1].",
+  ],
+]);
 
 function embed(text) {
   const vector = Array.from({ length: dimensions }, () => 0);
@@ -40,12 +46,14 @@ createServer(async (request, response) => {
   if (request.url === "/v1/chat/completions" && request.method === "POST") {
     const system = body.messages?.find((message) => message.role === "system")?.content ?? "";
     const context = system.split("DOCUMENT CONTEXT\n")[1] ?? "";
+    const question = body.messages?.findLast((message) => message.role === "user")?.content ?? "";
+    const answer = deterministicAnswers.get(question) ?? `${context} [1]`;
     return json(response, 200, {
       id: "chatcmpl-test",
       object: "chat.completion",
       created: 0,
       model: body.model,
-      choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: `${context} [1]` } }],
+      choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: answer } }],
       usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
     });
   }
