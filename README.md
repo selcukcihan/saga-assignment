@@ -1,16 +1,14 @@
 # Multi-Source Knowledge API
 
-> A self-contained conversational RAG service with asynchronous multi-format ingestion, source citations, and conversation-aware retrieval.
-
 This repository contains a conversational retrieval-augmented generation (RAG) API for ingesting PDF, DOCX, CSV, and JSON documents and answering questions with source citations and conversation context.
 
 `docker compose up --build` starts PostgreSQL/pgvector, runs the Drizzle migration once, and then starts independent API and worker processes with shared upload storage.
 
 ## Quick Start and Manual Demo
 
-The shortest path uses the JSON fixture included in this repository. Docker is the only application runtime dependency; the application services, PostgreSQL/pgvector, migrations, PDF/OCR tools, and Node.js runtime are contained in the Compose setup.
+Docker is the only application runtime dependency; the application services, PostgreSQL/pgvector, migrations, PDF/OCR tools, and Node.js runtime are contained in the Compose setup.
 
-Create the local configuration, set a real OpenAI API key, and start the stack:
+Create the local configuration, set a real OpenAI API key, and start the app:
 
 ```bash
 cp .env.example .env
